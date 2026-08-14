@@ -226,6 +226,8 @@
 
 ## 最近完成
 
+- [x] 创建二开决策文档 `docs/fork-plan.md`：沉淀 2026-08-14/15 项目评估结论（fork 做减法不重写、AI 端内直连自填 key 不做云后端、模型/词典趁 CDN 存活备份自持、包名接管安装策略、release.yml 精简方案、写作/听写/考试题型功能路线），供后续会话免聊天历史直接续上下文。仅文档，无代码改动。**完成时间**: 2026-08-15
+
 - [x] Paddle checkout 与 Customer Portal 统一改用系统外部浏览器打开，移动端不再使用 `inAppBrowserView`，避免 Custom Tab / Safari View Controller 对 checkout 重定向处理不一致；补充 checkout 与 Portal 的打开模式回归断言。**完成时间**: 2026-08-05
 
 - [x] Paddle 一次性年付客户端接入：消费 `/api/paddle/plans.oneTimePlans`，在 Paddle 套餐区并列展示一次性年付并复用现有 checkout/权益确认链路；会员态按 `purchaseType` 展示固定期限语义，一次性买家不显示管理订阅入口，现有订阅行为保持不变。补充 Paddle catalog 隔离解析、旧后端/旧缓存兼容、direct 与商店 Web 兜底 planId、固定期限会员 UI 回归测试；subscription 测试目录 138 项全绿。**完成时间**: 2026-08-04
