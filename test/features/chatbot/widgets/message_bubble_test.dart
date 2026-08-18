@@ -1,4 +1,4 @@
-/// ChatMessageBubble 测试：角色 / 思考中 / inline 重试 / 升级 / 复制。
+/// ChatMessageBubble 测试：角色 / 思考中 / inline 重试 / 登录 / 复制。
 library;
 
 import 'package:flutter/gestures.dart';
@@ -8,7 +8,6 @@ import 'package:echo_loop/features/chatbot/models/chat_message.dart';
 import 'package:echo_loop/features/chatbot/models/chat_role.dart';
 import 'package:echo_loop/features/chatbot/widgets/markdown_message.dart';
 import 'package:echo_loop/features/chatbot/widgets/message_bubble.dart';
-import 'package:echo_loop/features/subscription/models/ai_quota_rejection.dart';
 import 'package:echo_loop/widgets/selection/selectable_content.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -23,13 +22,11 @@ void main() {
     ChatRole role = ChatRole.assistant,
     String content = '',
     ChatMessageStatus status = ChatMessageStatus.done,
-    AiQuotaRejectionReason quotaReason = AiQuotaRejectionReason.exhausted,
   }) => ChatMessage(
     id: 'm1',
     role: role,
     content: content,
     status: status,
-    quotaReason: quotaReason,
     createdAt: now,
   );
 
@@ -80,36 +77,6 @@ void main() {
     expect(retried, isTrue);
   });
 
-  testWidgets('quotaBlocked 态说明升级收益并显示明确升级按钮', (tester) async {
-    var upgraded = false;
-    await pumpChatWidget(
-      tester,
-      ChatMessageBubble(
-        message: msg(content: '额度', status: ChatMessageStatus.quotaBlocked),
-        onUpgrade: () => upgraded = true,
-      ),
-    );
-    final upgrade = find.text(
-      "This month's free AI assistant quota is used up",
-    );
-    expect(upgrade, findsOneWidget);
-    expect(
-      find.text('Upgrade for more AI access and features.'),
-      findsOneWidget,
-    );
-    expect(find.text('Upgrade Now'), findsOneWidget);
-    expect(find.byType(FilledButton), findsOneWidget);
-    expect(
-      find.descendant(
-        of: find.byType(FilledButton),
-        matching: find.byIcon(Icons.workspace_premium_outlined),
-      ),
-      findsNothing,
-    );
-    await tester.tap(find.text('Upgrade Now'));
-    expect(upgraded, isTrue);
-  });
-
   testWidgets('authRequired 态显示 inline 登录并回调', (tester) async {
     var signedIn = false;
     await pumpChatWidget(
@@ -123,28 +90,6 @@ void main() {
     expect(signIn, findsOneWidget);
     await tester.tap(signIn);
     expect(signedIn, isTrue);
-  });
-
-  testWidgets('quotaBlocked 免费版禁用态显示专属文案', (tester) async {
-    await pumpChatWidget(
-      tester,
-      ChatMessageBubble(
-        message: msg(
-          content: '禁用',
-          status: ChatMessageStatus.quotaBlocked,
-          quotaReason: AiQuotaRejectionReason.unsupportedForFreePlan,
-        ),
-      ),
-    );
-
-    expect(
-      find.text("The free plan doesn't support AI assistant"),
-      findsOneWidget,
-    );
-    expect(
-      find.text('Upgrade to unlock this feature and more AI features.'),
-      findsOneWidget,
-    );
   });
 
   testWidgets(

@@ -1,5 +1,4 @@
 import 'package:echo_loop/l10n/app_localizations.dart';
-import 'package:echo_loop/features/subscription/models/ai_quota_rejection.dart';
 import 'package:echo_loop/models/dictionary/dictionary_entry.dart';
 import 'package:echo_loop/models/dictionary/dictionary_lookup_result.dart';
 import 'package:echo_loop/providers/dictionary/lookup_controller.dart';
@@ -92,52 +91,11 @@ MultiWordDictionaryEntry _multiEntry() => MultiWordDictionaryEntry(
 );
 
 void main() {
-  AiDictResultView view(SourceLookupState state, {VoidCallback? onUpgrade}) =>
-      AiDictResultView(
-        state: state,
-        onRetry: () {},
-        onSignIn: () {},
-        onUpgrade: onUpgrade ?? () {},
-      );
-
-  testWidgets('额度用尽态渲染升级引导卡并回调 onUpgrade', (tester) async {
-    var upgraded = false;
-    await tester.pumpWidget(
-      _wrap(
-        view(const LookupQuotaExceeded(), onUpgrade: () => upgraded = true),
-      ),
-    );
-    // 高亮升级按钮 + premium 图标（locale 无关）
-    expect(
-      find.text("This month's free AI word analysis quota is used up"),
-      findsOneWidget,
-    );
-    expect(find.byType(FilledButton), findsOneWidget);
-    expect(find.byIcon(Icons.workspace_premium), findsOneWidget);
-    await tester.tap(find.byType(FilledButton));
-    expect(upgraded, isTrue);
-  });
-
-  testWidgets('免费版禁用态渲染专属文案', (tester) async {
-    await tester.pumpWidget(
-      _wrap(
-        view(
-          const LookupQuotaExceeded(
-            reason: AiQuotaRejectionReason.unsupportedForFreePlan,
-          ),
-        ),
-      ),
-    );
-
-    expect(
-      find.text("The free plan doesn't support AI word analysis"),
-      findsOneWidget,
-    );
-    expect(
-      find.text('Upgrade to unlock this feature and more AI features.'),
-      findsOneWidget,
-    );
-  });
+  AiDictResultView view(SourceLookupState state) => AiDictResultView(
+    state: state,
+    onRetry: () {},
+    onSignIn: () {},
+  );
 
   testWidgets('Loaded 渲染词性/对应词/英文释义/例句/近义词 chip', (tester) async {
     await tester.pumpWidget(_wrap(view(LookupLoaded(AiDictResult(_entry())))));

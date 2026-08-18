@@ -18,11 +18,6 @@ import 'package:echo_loop/features/chatbot/services/chat_api_client.dart';
 import 'package:echo_loop/features/chatbot/services/ndjson_text_stream.dart';
 import 'package:echo_loop/features/chatbot/state/chat_session_state.dart';
 import 'package:echo_loop/features/chatbot/widgets/chat_view.dart';
-import 'package:echo_loop/features/subscription/models/premium_feature.dart';
-import 'package:echo_loop/features/subscription/providers/ai_trial_usage_provider.dart';
-import 'package:echo_loop/features/subscription/providers/subscription_controller.dart';
-import 'package:echo_loop/features/subscription/services/free_allowance_policy.dart';
-import 'package:echo_loop/features/subscription/state/entitlement_state.dart';
 import 'package:echo_loop/providers/settings_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -52,18 +47,6 @@ class _SlowApi implements ChatApi {
 
   @override
   void dispose() {}
-}
-
-class _Trial extends AiTrialUsageNotifier {
-  @override
-  Map<PremiumFeature, int> build() => const {};
-  @override
-  void consume(PremiumFeature feature) {}
-}
-
-class _FreeSub extends SubscriptionController {
-  @override
-  EntitlementState build() => const EntitlementState.free();
 }
 
 Session _session() => Session(
@@ -113,11 +96,6 @@ void main() {
         supabaseSessionProvider.overrideWith(
           (ref) => Stream<Session?>.value(_session()),
         ),
-        freeAllowancePolicyProvider.overrideWithValue(
-          const AlwaysAllowPolicy(),
-        ),
-        subscriptionControllerProvider.overrideWith(() => _FreeSub()),
-        aiTrialUsageProvider.overrideWith(() => _Trial()),
         appSettingsProvider.overrideWith(() => TestAppSettings()),
       ],
     );

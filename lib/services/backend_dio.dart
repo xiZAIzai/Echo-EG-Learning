@@ -18,7 +18,6 @@ import 'package:dio/dio.dart';
 import 'api_log_interceptor.dart';
 import 'app_logger.dart';
 import 'client_info.dart';
-import 'entitlement_signal_interceptor.dart';
 import 'supabase_token_coordinator.dart';
 
 /// 响应 401 后的端点级重试策略；默认禁止重放业务请求。
@@ -58,8 +57,6 @@ Dio createBackendDio({
   dio.interceptors.add(
     ApiLogInterceptor(tag: apiLogTag, logPrint: apiLogPrint),
   );
-  // E6：读取权益信号响应头，服务端权益变化（退款/到期）时提示订阅层回源对账。
-  dio.interceptors.add(EntitlementSignalInterceptor());
   return dio;
 }
 

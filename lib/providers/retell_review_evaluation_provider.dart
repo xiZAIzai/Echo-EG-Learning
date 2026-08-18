@@ -9,11 +9,6 @@ import 'package:universal_io/io.dart';
 
 import '../config/api_config.dart';
 import '../features/auth/providers/auth_providers.dart';
-import '../features/subscription/models/ai_quota_rejection.dart';
-import '../features/subscription/models/premium_feature.dart';
-import '../features/subscription/providers/ai_trial_usage_provider.dart';
-import '../features/subscription/providers/feature_access_provider.dart';
-import '../features/subscription/providers/subscription_controller.dart';
 import '../models/retell_review_evaluation.dart';
 import '../models/retell_review_sample.dart';
 import '../services/app_logger.dart';
@@ -27,22 +22,20 @@ enum RetellReviewEvaluationPhase { idle, loading, streaming, completed, failed }
 
 /// 当前录音 attempt 对应的评估 UI 状态。
 ///
-/// [errorCode] 取值：`auth_required`（未登录 / 后端 401）、`quota_exceeded`
-/// （本地闸门未过 / 后端 402）、`audio_preparation_failed`、`audio_too_large`、
+/// [errorCode] 取值：`auth_required`（未登录 / 后端 401）、
+/// `audio_preparation_failed`、`audio_too_large`、
 /// `stream_failed`、`request_failed`。文案与出路见 `retell_review_sheet.dart`。
 class RetellReviewEvaluationState {
   final String? attemptKey;
   final RetellReviewEvaluationPhase phase;
   final RetellReviewEvaluation? evaluation;
   final String? errorCode;
-  final AiQuotaRejectionReason quotaReason;
 
   const RetellReviewEvaluationState({
     this.attemptKey,
     this.phase = RetellReviewEvaluationPhase.idle,
     this.evaluation,
     this.errorCode,
-    this.quotaReason = AiQuotaRejectionReason.exhausted,
   });
 
   bool get hasCachedResult =>
@@ -102,8 +95,7 @@ class RetellReviewEvaluationController
       return;
     }
 
-    // 闸门与 AI 转录 / 对话同一套，且必须早于音频转码与 2MB 上传：撞墙时既不烧
-    // 本地转码算力，也不占上行带宽。额度的唯一权威仍是后端 402。
+    // 登录闸门必须早于音频转码与 2MB 上传：撞墙时既不烧本地转码算力，也不占上行带宽。
     final accessToken = ref
         .read(supabaseSessionProvider)
         .valueOrNull
@@ -111,11 +103,6 @@ class RetellReviewEvaluationController
     if (accessToken == null || accessToken.isEmpty) {
       AppLogger.log('RetellReview', '评估需要登录态，未取到 access token');
       _failFast(attemptKey, 'auth_required');
-      return;
-    }
-    if (!ref.read(featureAccessProvider(PremiumFeature.aiRetellReview))) {
-      AppLogger.log('RetellReview', '未解锁 AI 复述评估（非会员且试用用尽）');
-      _failFast(attemptKey, 'quota_exceeded');
       return;
     }
 
@@ -163,7 +150,6 @@ class RetellReviewEvaluationController
       if (!receivedFinalFrame && _isCurrent(generation, attemptKey)) {
         throw const RetellReviewStreamException();
       }
-      _consumeTrial();
     } on RetellReviewAudioPreparationException {
       _setFailure(generation, attemptKey, 'audio_preparation_failed');
     } on RetellReviewAudioTooLargeException {
@@ -175,18 +161,6 @@ class RetellReviewEvaluationController
       switch (error.response?.statusCode) {
         case 401:
           _setFailure(generation, attemptKey, 'auth_required');
-        case 402:
-          // E7：后端权威裁决为「无额度」，回源对账收敛本地权益分歧。
-          ref.read(entitlementQuotaDivergenceHandlerProvider)('retellReview');
-          final rejection = AiQuotaRejection.fromResponseData(
-            error.response?.data,
-          );
-          _setFailure(
-            generation,
-            attemptKey,
-            'quota_exceeded',
-            quotaReason: rejection.reason,
-          );
         default:
           _setFailure(generation, attemptKey, 'request_failed');
       }
@@ -241,26 +215,12 @@ class RetellReviewEvaluationController
     );
   }
 
-  /// 成功后消耗一次免费试用（会员不计；本地预测计数，权威在后端）。
-  void _consumeTrial() {
-    if (ref.read(subscriptionControllerProvider).isActive) return;
-    ref
-        .read(aiTrialUsageProvider.notifier)
-        .consume(PremiumFeature.aiRetellReview);
-  }
-
-  void _setFailure(
-    int generation,
-    String attemptKey,
-    String errorCode, {
-    AiQuotaRejectionReason quotaReason = AiQuotaRejectionReason.exhausted,
-  }) {
+  void _setFailure(int generation, String attemptKey, String errorCode) {
     if (!_isCurrent(generation, attemptKey)) return;
     state = RetellReviewEvaluationState(
       attemptKey: attemptKey,
       phase: RetellReviewEvaluationPhase.failed,
       errorCode: errorCode,
-      quotaReason: quotaReason,
     );
   }
 

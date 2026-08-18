@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:dio/dio.dart';
-import 'package:echo_loop/features/subscription/models/ai_quota_rejection.dart';
 import 'package:echo_loop/features/usage/usage_counters.dart';
 import 'package:echo_loop/features/usage/usage_event.dart';
 import 'package:echo_loop/features/usage/usage_providers.dart';
@@ -282,57 +281,6 @@ void main() {
     expect(
       c.read(dictionaryLookupControllerProvider('run')).current,
       isA<LookupLoaded>(),
-    );
-  });
-
-  test('后端 402（本月额度用尽）→ LookupQuotaExceeded', () async {
-    final a = ControllableSource('a');
-    final c = makeContainer({'a': a});
-    start(c, 'run');
-    await pump();
-    a.calls.single.completeError(
-      DioException(
-        requestOptions: RequestOptions(path: '/api/v2/ai/dictionary'),
-        response: Response(
-          requestOptions: RequestOptions(path: '/api/v2/ai/dictionary'),
-          statusCode: 402,
-        ),
-      ),
-    );
-    await pump();
-    expect(
-      c.read(dictionaryLookupControllerProvider('run')).current,
-      isA<LookupQuotaExceeded>(),
-    );
-  });
-
-  test('后端 402 quota_exceeded + limit=0 → 免费版不支持原因', () async {
-    final source = ControllableSource('a');
-    final container = makeContainer({'a': source});
-    start(container, 'run');
-    await pump();
-    source.calls.single.completeError(
-      DioException(
-        requestOptions: RequestOptions(path: '/api/v2/ai/dictionary'),
-        response: Response(
-          requestOptions: RequestOptions(path: '/api/v2/ai/dictionary'),
-          statusCode: 402,
-          data: {
-            'code': 'quota_exceeded',
-            'quota': {'used': 0, 'limit': 0},
-          },
-        ),
-      ),
-    );
-    await pump();
-
-    final state = container
-        .read(dictionaryLookupControllerProvider('run'))
-        .current;
-    expect(state, isA<LookupQuotaExceeded>());
-    expect(
-      (state as LookupQuotaExceeded).reason,
-      AiQuotaRejectionReason.unsupportedForFreePlan,
     );
   });
 

@@ -8,7 +8,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../widgets/selection/selection_toolbar_host.dart';
 import '../../auth/sign_in_required_dialog.dart';
-import '../../subscription/widgets/feature_gate.dart';
 import '../models/chatbot_config.dart';
 import '../providers/chat_session_controller.dart';
 import '../screens/chat_edit_screen.dart';
@@ -106,7 +105,6 @@ class _ChatViewState extends ConsumerState<ChatView> {
               child: ChatMessageList(
                 config: config,
                 onRetry: (_) => notifier.retry(),
-                onUpgrade: () => openPaywall(context, ref),
                 onSignIn: () => _signIn(context, ref, l10n, notifier),
                 onCopy: (content) => _copy(context, l10n, content),
                 onEdit: (messageId) => _handleEdit(notifier, messageId),
@@ -116,7 +114,6 @@ class _ChatViewState extends ConsumerState<ChatView> {
             ),
             ChatGateBanner(
               gate: gate,
-              onUpgrade: () => openPaywall(context, ref),
               onSignIn: () => _signIn(context, ref, l10n, notifier),
             ),
             if (_pendingQuote != null)

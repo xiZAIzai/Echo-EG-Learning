@@ -12,11 +12,9 @@ import 'chatbot_widget_harness.dart';
 void main() {
   ChatGateBanner banner(
     ChatGate gate, {
-    VoidCallback? onUpgrade,
     VoidCallback? onSignIn,
   }) => ChatGateBanner(
     gate: gate,
-    onUpgrade: onUpgrade ?? () {},
     onSignIn: onSignIn ?? () {},
   );
 
@@ -34,21 +32,6 @@ void main() {
     expect(find.text('Sign in required'), findsOneWidget);
     await tester.tap(find.byType(TextButton));
     expect(signIn, isTrue);
-  });
-
-  testWidgets('gate=quotaExceeded → 升级入口并回调', (tester) async {
-    var upgrade = false;
-    await pumpChatWidget(
-      tester,
-      banner(ChatGate.quotaExceeded, onUpgrade: () => upgrade = true),
-    );
-    expect(
-      find.text("This month's free AI assistant quota is used up"),
-      findsOneWidget,
-    );
-    expect(find.text('Upgrade'), findsOneWidget);
-    await tester.tap(find.byType(TextButton));
-    expect(upgrade, isTrue);
   });
 
   testWidgets('ChatContextChip 显示摘要且单行省略', (tester) async {

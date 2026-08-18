@@ -12,7 +12,6 @@ import 'package:go_router/go_router.dart';
 import '../analytics/analytics_observer.dart';
 import '../analytics/analytics_providers.dart';
 import '../features/auth/screens/account_screen.dart';
-import '../features/subscription/screens/paywall_screen.dart';
 import '../features/auth/screens/check_email_screen.dart';
 import '../features/auth/screens/email_sign_in_screen.dart';
 import '../features/auth/screens/login_screen.dart';
@@ -163,8 +162,6 @@ abstract class AppRoutes {
   /// Onboarding 问卷页路径（仅首启新用户访问）
   static const onboardingSurvey = '/onboarding/survey';
 
-  /// 订阅计划介绍 / 购买页（Paywall）
-  static const paywall = '/paywall';
 
   /// 在「当前路由位置之下」push 一个全屏子页。
   ///
@@ -491,11 +488,6 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         path: AppRoutes.account,
         parentNavigatorKey: rootNavigatorKey,
         builder: (context, state) => const AccountScreen(),
-      ),
-      GoRoute(
-        path: AppRoutes.paywall,
-        parentNavigatorKey: rootNavigatorKey,
-        builder: (context, state) => const PaywallScreen(),
       ),
       // 收藏句子复习（全屏）
       GoRoute(

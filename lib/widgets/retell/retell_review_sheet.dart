@@ -8,9 +8,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../l10n/app_localizations.dart';
-import '../../features/subscription/models/premium_feature.dart';
-import '../../features/subscription/models/ai_quota_rejection.dart';
-import '../../features/subscription/utils/ai_quota_copy.dart';
 import '../../models/retell_review_evaluation.dart';
 import '../../providers/retell_review_evaluation_provider.dart';
 import '../../services/audio_preview_controller.dart';
@@ -21,21 +18,13 @@ import 'retell_review_report.dart';
 /// 把 controller 的 `errorCode` 映射成用户可见文案。
 ///
 /// 弹窗内失败态和页面级 SnackBar 共用，保证同一失败说的是同一句话。
-String retellReviewErrorMessage(
-  AppLocalizations l10n,
-  String? errorCode, {
-  AiQuotaRejectionReason quotaReason = AiQuotaRejectionReason.exhausted,
-}) => switch (errorCode) {
-  'audio_preparation_failed' => l10n.retellAiReviewAudioPreparationError,
-  'audio_too_large' => l10n.retellAiReviewAudioTooLarge,
-  'auth_required' => l10n.retellAiReviewSignInRequiredTitle,
-  'quota_exceeded' => aiQuotaTitleFor(
-    l10n,
-    PremiumFeature.aiRetellReview,
-    quotaReason,
-  ),
-  _ => l10n.retellAiReviewError,
-};
+String retellReviewErrorMessage(AppLocalizations l10n, String? errorCode) =>
+    switch (errorCode) {
+      'audio_preparation_failed' => l10n.retellAiReviewAudioPreparationError,
+      'audio_too_large' => l10n.retellAiReviewAudioTooLarge,
+      'auth_required' => l10n.retellAiReviewSignInRequiredTitle,
+      _ => l10n.retellAiReviewError,
+    };
 
 /// 打开并持续订阅当前录音 attempt 的流式评估结果。
 Future<void> showRetellReviewSheet(
@@ -44,7 +33,6 @@ Future<void> showRetellReviewSheet(
   required AudioPreviewController preview,
   required Future<void> Function() onBeforePlayback,
   required Future<void> Function() onRetry,
-  required Future<void> Function() onUpgrade,
   required Future<void> Function() onSignIn,
 }) => showModalBottomSheet<void>(
   context: context,
@@ -58,7 +46,6 @@ Future<void> showRetellReviewSheet(
     preview: preview,
     onBeforePlayback: onBeforePlayback,
     onRetry: onRetry,
-    onUpgrade: onUpgrade,
     onSignIn: onSignIn,
   ),
 );
@@ -68,7 +55,6 @@ class _RetellReviewSheet extends ConsumerWidget {
   final AudioPreviewController preview;
   final Future<void> Function() onBeforePlayback;
   final Future<void> Function() onRetry;
-  final Future<void> Function() onUpgrade;
   final Future<void> Function() onSignIn;
 
   const _RetellReviewSheet({
@@ -76,7 +62,6 @@ class _RetellReviewSheet extends ConsumerWidget {
     required this.preview,
     required this.onBeforePlayback,
     required this.onRetry,
-    required this.onUpgrade,
     required this.onSignIn,
   });
 
@@ -127,10 +112,8 @@ class _RetellReviewSheet extends ConsumerWidget {
         message: retellReviewErrorMessage(
           l10n,
           state.errorCode,
-          quotaReason: state.quotaReason,
         ),
         onRetry: onRetry,
-        onUpgrade: onUpgrade,
         onSignIn: onSignIn,
       );
     }
@@ -284,14 +267,12 @@ class _ReviewFailure extends StatelessWidget {
   final String? errorCode;
   final String message;
   final Future<void> Function() onRetry;
-  final Future<void> Function() onUpgrade;
   final Future<void> Function() onSignIn;
 
   const _ReviewFailure({
     required this.errorCode,
     required this.message,
     required this.onRetry,
-    required this.onUpgrade,
     required this.onSignIn,
   });
 
@@ -300,11 +281,6 @@ class _ReviewFailure extends StatelessWidget {
     final theme = Theme.of(context);
     final l10n = AppLocalizations.of(context)!;
     final (actionLabel, actionIcon, onAction) = switch (errorCode) {
-      'quota_exceeded' => (
-        l10n.aiQuotaExceededSubscribe,
-        Icons.workspace_premium_rounded,
-        onUpgrade,
-      ),
       'auth_required' => (l10n.authSignInButton, Icons.login_rounded, onSignIn),
       _ => (l10n.retellAiReviewRetry, Icons.refresh_rounded, onRetry),
     };

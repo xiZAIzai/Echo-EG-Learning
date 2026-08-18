@@ -14,7 +14,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../features/auth/sign_in_required_dialog.dart';
-import '../../features/subscription/widgets/feature_gate.dart';
 import '../../l10n/app_localizations.dart';
 import '../../models/dictionary/dict_speakable_texts.dart';
 import '../../providers/dictionary/dictionary_registry.dart';
@@ -249,13 +248,6 @@ class _DictionaryPanelState extends ConsumerState<DictionaryPanel> {
     }
   }
 
-  /// 本月免费额度用尽 → 打开订阅页；返回后重试（已订阅则放行，否则仍显示额度用尽）。
-  Future<void> _handleUpgrade(String word) async {
-    await openPaywall(context, ref);
-    if (!mounted) return;
-    ref.read(_controllerProvider(word).notifier).retry();
-  }
-
   DictionaryLookupControllerProvider _controllerProvider(String word) =>
       dictionaryLookupControllerProvider(
         word,
@@ -375,7 +367,6 @@ class _DictionaryPanelState extends ConsumerState<DictionaryPanel> {
       word: word,
       onRetry: notifier.retry,
       onSignIn: () => _handleSignIn(lookupQuery),
-      onUpgrade: () => _handleUpgrade(lookupQuery),
     );
     if (isWeb) {
       // 填满剩余高度且占满宽度，交由 WebView 自身渲染滚动

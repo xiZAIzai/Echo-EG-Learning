@@ -19,7 +19,6 @@ import '../../features/chatbot/chatbot_flags.dart';
 import '../../features/chatbot/widgets/sentence_chat_button.dart';
 import '../../features/remote_config/remote_config.dart';
 import '../../features/remote_config/remote_config_providers.dart';
-import '../../features/subscription/widgets/ai_quota_exceeded_dialog.dart';
 import '../../features/usage/usage_event.dart';
 import '../../features/usage/usage_providers.dart';
 import '../../database/providers.dart';
@@ -177,9 +176,6 @@ class _AnnotationContentViewState extends ConsumerState<AnnotationContentView> {
 
   /// 上传字幕推测时间提示是否正在展示，防止快速连点弹出多个对话框。
   bool _isShowingSyntheticTimingNotice = false;
-
-  /// quota 提醒弹窗是否正在展示，防止翻译/解析并发失败时叠多个弹窗。
-  bool _isShowingAiQuotaDialog = false;
 
   // --- 意群快捷菜单 Overlay ---
   OverlayEntry? _actionBarOverlay;
@@ -367,7 +363,6 @@ class _AnnotationContentViewState extends ConsumerState<AnnotationContentView> {
           sentenceEndMs: endMs,
           wordTimestamps: _wordTimestamps,
           cancelToken: cancel,
-          respectLocalQuotaReset: source == SentenceAiRequestSource.automatic,
         )
         .listen(
           (frame) {
@@ -390,13 +385,6 @@ class _AnnotationContentViewState extends ConsumerState<AnnotationContentView> {
             if (!mounted) return;
             if (e is AiFeatureAuthRequiredException) {
               _showAiFeatureSignInDialog();
-            } else if (e is AiFeatureQuotaExceededException) {
-              unawaited(
-                _showAiQuotaExceededDialog(
-                  e,
-                  force: source == SentenceAiRequestSource.userTap,
-                ),
-              );
             } else {
               AppLogger.log('SenseGroup', '请求意群失败: $e');
               final l10n = AppLocalizations.of(context);
@@ -454,26 +442,6 @@ class _AnnotationContentViewState extends ConsumerState<AnnotationContentView> {
           l10n?.senseGroupSignInRequiredMessage ??
           'AI translation, analysis, and sense group splitting use the cloud AI service. Sign in to generate new results. Cached results remain available.',
     );
-  }
-
-  /// 已登录但未解锁 AI 功能时展示统一额度提示。
-  Future<void> _showAiQuotaExceededDialog(
-    AiFeatureQuotaExceededException error, {
-    bool force = false,
-  }) async {
-    if (_isShowingAiQuotaDialog || !mounted) return;
-    _isShowingAiQuotaDialog = true;
-    try {
-      await showAiQuotaExceededDialog(
-        context: context,
-        ref: ref,
-        feature: error.feature,
-        reason: error.reason,
-        respectReminderCooldown: !force,
-      );
-    } finally {
-      _isShowingAiQuotaDialog = false;
-    }
   }
 
   /// 意群粒度切换回调
@@ -991,8 +959,8 @@ class _AnnotationContentViewState extends ConsumerState<AnnotationContentView> {
                       try {
                         final (requestPreviousText, requestNextText) =
                             await resolveTranslationContext();
-                        // await for（非 yield*）确保流内 auth/quota 错误在本
-                        // try 内重抛，从而弹登录/订阅（与 onRequestAnalysis 语义一致）。
+                        // await for（非 yield*）确保流内 auth 错误在本
+                        // try 内重抛，从而弹登录（与 onRequestAnalysis 语义一致）。
                         await for (final t in ai.getTranslationStream(
                           widget.text,
                           previous: requestPreviousText,
@@ -1000,8 +968,6 @@ class _AnnotationContentViewState extends ConsumerState<AnnotationContentView> {
                           targetLanguage: nativeLanguage,
                           accessToken: accessToken,
                           cancelToken: cancelToken,
-                          respectLocalQuotaReset:
-                              source == SentenceAiRequestSource.automatic,
                         )) {
                           if (t.translation.isNotEmpty) {
                             hasContent = true;
@@ -1018,16 +984,6 @@ class _AnnotationContentViewState extends ConsumerState<AnnotationContentView> {
                           unawaited(_showAiFeatureSignInDialog());
                         }
                         rethrow;
-                      } on AiFeatureQuotaExceededException catch (e) {
-                        if (mounted) {
-                          unawaited(
-                            _showAiQuotaExceededDialog(
-                              e,
-                              force: source == SentenceAiRequestSource.userTap,
-                            ),
-                          );
-                        }
-                        rethrow;
                       }
                     }
                   : null,
@@ -1035,15 +991,13 @@ class _AnnotationContentViewState extends ConsumerState<AnnotationContentView> {
                   ? (cancelToken, source) async* {
                       var hasContent = false;
                       try {
-                        // await for 确保流内 auth/quota 错误进入本层 catch，
-                        // 从而触发登录或订阅导航，并由卡片恢复按钮状态。
+                        // await for 确保流内 auth 错误进入本层 catch，
+                        // 从而触发登录导航，并由卡片恢复按钮状态。
                         await for (final analysis in ai.getAnalysisStream(
                           widget.text,
                           targetLanguage: nativeLanguage,
                           accessToken: accessToken,
                           cancelToken: cancelToken,
-                          respectLocalQuotaReset:
-                              source == SentenceAiRequestSource.automatic,
                         )) {
                           if (analysis.isNotEmpty) {
                             hasContent = true;
@@ -1058,16 +1012,6 @@ class _AnnotationContentViewState extends ConsumerState<AnnotationContentView> {
                       } on AiFeatureAuthRequiredException {
                         if (mounted) {
                           unawaited(_showAiFeatureSignInDialog());
-                        }
-                        rethrow;
-                      } on AiFeatureQuotaExceededException catch (e) {
-                        if (mounted) {
-                          unawaited(
-                            _showAiQuotaExceededDialog(
-                              e,
-                              force: source == SentenceAiRequestSource.userTap,
-                            ),
-                          );
                         }
                         rethrow;
                       }

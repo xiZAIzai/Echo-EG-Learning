@@ -6,7 +6,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:echo_loop/models/sense_group_result.dart';
 import 'package:echo_loop/models/sentence_ai_result.dart';
-import 'package:echo_loop/providers/sentence_ai_provider.dart';
 import 'package:echo_loop/theme/app_theme.dart';
 import 'package:echo_loop/utils/sense_group_timing.dart';
 import 'package:echo_loop/widgets/common/shimmer_placeholder.dart';
@@ -297,34 +296,6 @@ void main() {
       expect(callCount, 1);
     });
 
-    testWidgets('翻译额度异常后恢复待点击状态并允许重试', (tester) async {
-      var callCount = 0;
-
-      await tester.pumpWidget(
-        createTestApp(
-          SentenceAnnotationCard(
-            text: 'Test',
-            onRequestTranslation: (_, __) {
-              callCount++;
-              return Stream<String>.error(
-                const AiFeatureQuotaExceededException(),
-              );
-            },
-          ),
-        ),
-      );
-
-      await tester.tap(find.byIcon(Icons.translate));
-      await tester.pumpAndSettle();
-
-      expect(find.byType(CircularProgressIndicator), findsNothing);
-      expect(find.byType(ShimmerPlaceholder), findsNothing);
-
-      await tester.tap(find.byIcon(Icons.translate));
-      await tester.pumpAndSettle();
-      expect(callCount, 2);
-    });
-
     testWidgets('展开后再次点击可折叠', (tester) async {
       await tester.pumpWidget(
         createTestApp(
@@ -564,34 +535,6 @@ void main() {
       await tester.pump();
 
       expect(captured!.isCancelled, isTrue);
-    });
-
-    testWidgets('解析额度异常后恢复待点击状态并允许重试', (tester) async {
-      var callCount = 0;
-
-      await tester.pumpWidget(
-        createTestApp(
-          SentenceAnnotationCard(
-            text: 'Hello',
-            onRequestAnalysis: (_, __) {
-              callCount++;
-              return Stream<SentenceAnalysis>.error(
-                const AiFeatureQuotaExceededException(),
-              );
-            },
-          ),
-        ),
-      );
-
-      await tester.tap(find.byIcon(Icons.auto_awesome));
-      await tester.pumpAndSettle();
-
-      expect(find.byType(CircularProgressIndicator), findsNothing);
-      expect(find.byType(ShimmerPlaceholder), findsNothing);
-
-      await tester.tap(find.byIcon(Icons.auto_awesome));
-      await tester.pumpAndSettle();
-      expect(callCount, 2);
     });
 
     testWidgets('cachedAnalysis 初始自动展开', (tester) async {

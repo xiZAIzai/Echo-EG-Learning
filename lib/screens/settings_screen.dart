@@ -34,10 +34,7 @@ import '../analytics/models/event_names.dart';
 import '../config/app_store_config.dart';
 import '../features/auth/providers/auth_providers.dart';
 import '../features/auth/screens/account_screen.dart';
-import '../features/subscription/providers/subscription_availability.dart';
-import '../features/subscription/providers/subscription_controller.dart';
 import '../services/app_update_launcher.dart';
-import '../features/subscription/screens/subscription_debug_screen.dart';
 import '../router/app_router.dart';
 import '../features/onboarding_survey/providers/onboarding_survey_provider.dart';
 import '../services/app_network_image_cache.dart';
@@ -180,71 +177,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           onTap: () =>
               context.push(isSignedIn ? AppRoutes.account : AppRoutes.login),
         ),
-        // 当前平台未启用订阅（未注入 RC key）时隐藏入口。
-        if (ref.watch(subscriptionAvailabilityProvider))
-          _buildSubscriptionTile(context, l10n),
       ],
-    );
-  }
-
-  /// 构建订阅入口（账户分组内、登录 item 下方）。
-  ///
-  /// 保持简洁：只展示标题 + 状态徽章，详情（套餐、续费、管理）留给点击后的 Paywall。
-  /// 未订阅：右侧高亮金色「升级」徽章，提示开通会员。
-  /// 已订阅：右侧弱化「会员」描边徽章。
-  /// 点击统一进入 Paywall（其内部按 isPremium 区分购买页 / 管理订阅区）。
-  Widget _buildSubscriptionTile(BuildContext context, AppLocalizations l10n) {
-    final theme = Theme.of(context);
-    final gold = AppTheme.premiumGold(theme.brightness);
-    final isPremium = ref.watch(subscriptionControllerProvider).isActive;
-    final upgradeBadgeBackground = theme.brightness == Brightness.dark
-        ? const Color(0xFFD8B11E)
-        : const Color(0xFFFCE76B);
-    const upgradeBadgeTextColor = Color(0xFF111111);
-
-    return ListTile(
-      leading: _settingsSvgIcon('assets/icon/diamond.svg'),
-      title: Text(l10n.premiumEntryTitle),
-      trailing: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (isPremium)
-            // 已订阅：弱化徽章（描边，不再金底高亮），不再上销。
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(6),
-                border: Border.all(color: gold.withValues(alpha: 0.6)),
-              ),
-              child: Text(
-                l10n.premiumEntryBadgeActive,
-                style: theme.textTheme.labelSmall?.copyWith(
-                  color: gold,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            )
-          else
-            // 未订阅：与订阅页优惠条统一为高对比实底徽章，引导开通。
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(
-                color: upgradeBadgeBackground,
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Text(
-                l10n.premiumEntryBadgeUpgrade,
-                style: theme.textTheme.labelSmall?.copyWith(
-                  color: upgradeBadgeTextColor,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ),
-          const SizedBox(width: AppSpacing.xs),
-          const Icon(Icons.chevron_right),
-        ],
-      ),
-      onTap: () => context.push(AppRoutes.paywall),
     );
   }
 
@@ -889,17 +822,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           trailing: const Icon(Icons.chevron_right),
           onTap: () => Navigator.of(context).push(
             MaterialPageRoute<void>(builder: (_) => const LogViewerScreen()),
-          ),
-        ),
-        ListTile(
-          leading: _emojiIcon('💳'),
-          title: const Text('订阅调试'),
-          subtitle: const Text('诊断权益、清缓存强刷、覆盖 Pro/Free'),
-          trailing: const Icon(Icons.chevron_right),
-          onTap: () => Navigator.of(context).push(
-            MaterialPageRoute<void>(
-              builder: (_) => const SubscriptionDebugScreen(),
-            ),
           ),
         ),
         ListTile(

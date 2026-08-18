@@ -14,8 +14,8 @@ enum ChatSessionStatus { idle, streaming }
 /// 发送前闸门态（ChatGateBanner 的唯一数据源）。
 ///
 /// 一轮已开始后的失败不走这里，只落在那条 assistant 消息的 status 上
-/// （气泡 inline 重试 / 升级）。
-enum ChatGate { none, authRequired, quotaExceeded }
+/// （气泡 inline 重试 / 登录）。
+enum ChatGate { none, authRequired }
 
 /// 会话运行态（单一数据源）。State 可含 Model。
 @immutable
@@ -26,7 +26,7 @@ class ChatSessionState {
   /// 会话状态。
   final ChatSessionStatus status;
 
-  /// 发送前闸门：需登录 / 额度超限（本地预测）。
+  /// 发送前闸门：需登录。
   final ChatGate gate;
 
   const ChatSessionState({

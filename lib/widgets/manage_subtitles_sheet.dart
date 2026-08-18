@@ -11,12 +11,6 @@ import 'package:universal_io/io.dart';
 import '../analytics/models/event_names.dart';
 import '../features/auth/providers/auth_providers.dart';
 import '../features/auth/sign_in_required_dialog.dart';
-import '../features/subscription/models/ai_quota_rejection.dart';
-import '../features/subscription/models/premium_feature.dart';
-import '../features/subscription/providers/ai_trial_usage_provider.dart';
-import '../features/subscription/providers/feature_access_provider.dart';
-import '../features/subscription/providers/subscription_controller.dart';
-import '../features/subscription/widgets/ai_quota_exceeded_dialog.dart';
 import '../features/remote_config/remote_config_providers.dart';
 import '../features/usage/usage_event.dart';
 import '../features/usage/usage_providers.dart';
@@ -110,7 +104,6 @@ class _ManageSubtitlesSheetState extends ConsumerState<ManageSubtitlesSheet> {
   Timer? _errorClearTimer;
 
   /// 防止本地门禁与后端 402 同时抵达时叠加额度提示。
-  bool _isShowingAiQuotaDialog = false;
 
   // Guide step keys
   final _keyAiTranscription = GlobalKey();
@@ -249,14 +242,6 @@ class _ManageSubtitlesSheetState extends ConsumerState<ManageSubtitlesSheet> {
                 .clearState(audioItem.id);
             Navigator.pop(context);
           });
-        } else if (next is TranscriptionQuotaExceeded) {
-          // 本月免费额度用尽：清状态后由用户决定是否进入订阅页。
-          ref
-              .read(transcriptionTaskManagerProvider.notifier)
-              .clearState(audioItem.id);
-          if (mounted && context.mounted) {
-            unawaited(_showAiTranscriptionQuotaDialog(reason: next.reason));
-          }
         }
       },
     );
@@ -1797,11 +1782,6 @@ class _ManageSubtitlesSheetState extends ConsumerState<ManageSubtitlesSheet> {
       await _showTranscriptionSignInDialog(context);
       return;
     }
-    // 已登录但未解锁（非会员且 AI 转录试用用尽）→ 先明确提示额度。
-    if (!ref.read(featureAccessProvider(PremiumFeature.aiTranscription))) {
-      await _showAiTranscriptionQuotaDialog();
-      return;
-    }
 
     final limits = ref.read(remoteTranscriptionLimitsProvider);
 
@@ -1860,13 +1840,6 @@ class _ManageSubtitlesSheetState extends ConsumerState<ManageSubtitlesSheet> {
       if (confirmed != true) return;
     }
 
-    // 消耗一次免费试用（会员无限不计数）。转录为后台任务，于发起时计数。
-    if (!ref.read(subscriptionControllerProvider).isActive) {
-      ref
-          .read(aiTrialUsageProvider.notifier)
-          .consume(PremiumFeature.aiTranscription);
-    }
-
     // 启动后台转录任务
     ref
         .read(transcriptionTaskManagerProvider.notifier)
@@ -1885,24 +1858,6 @@ class _ManageSubtitlesSheetState extends ConsumerState<ManageSubtitlesSheet> {
             EventParams.audioName: audioItem.name,
           },
         );
-  }
-
-  /// AI 转录额度用尽提示；同一时间只允许一个弹窗存在。
-  Future<void> _showAiTranscriptionQuotaDialog({
-    AiQuotaRejectionReason reason = AiQuotaRejectionReason.exhausted,
-  }) async {
-    if (_isShowingAiQuotaDialog || !mounted) return;
-    _isShowingAiQuotaDialog = true;
-    try {
-      await showAiQuotaExceededDialog(
-        context: context,
-        ref: ref,
-        feature: PremiumFeature.aiTranscription,
-        reason: reason,
-      );
-    } finally {
-      _isShowingAiQuotaDialog = false;
-    }
   }
 
   Future<bool> _showContentStatusConfirmDialog(

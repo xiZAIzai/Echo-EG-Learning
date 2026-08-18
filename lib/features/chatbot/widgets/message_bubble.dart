@@ -8,8 +8,6 @@ import 'package:flutter_svg/flutter_svg.dart';
 
 import '../../../l10n/app_localizations.dart';
 import '../../../theme/app_theme.dart';
-import '../../subscription/models/premium_feature.dart';
-import '../../subscription/utils/ai_quota_copy.dart';
 import '../models/chat_message.dart';
 import '../models/chat_role.dart';
 import 'markdown_message.dart';
@@ -27,7 +25,6 @@ const String _iconQuote = 'assets/icon/chat/arrow-right-turn.svg';
 /// 单条气泡：user 右对齐纯文本气泡；assistant 左对齐 MarkdownMessage。
 /// - streaming 且 content 为空 → 显示「思考中」动画指示（三点跳动）；
 /// - error → 气泡内 inline 重试入口（onRetry）；
-/// - quotaBlocked → 气泡内 inline 升级入口（onUpgrade → openPaywall）；
 /// - authRequired → 气泡内 inline 登录入口（onSignIn → 登录引导弹窗）；
 /// - assistant done 态气泡下方常驻操作栏：复制 + 重新生成（左下）；
 /// - user 消息无常驻操作栏，长按（桌面右键）弹菜单：复制 + 编辑（编辑打开独立编辑页）；
@@ -41,7 +38,6 @@ class ChatMessageBubble extends StatelessWidget {
     super.key,
     required this.message,
     this.onRetry,
-    this.onUpgrade,
     this.onSignIn,
     this.onCopy,
     this.onEdit,
@@ -51,7 +47,6 @@ class ChatMessageBubble extends StatelessWidget {
 
   final ChatMessage message;
   final VoidCallback? onRetry; // 仅 error 态用
-  final VoidCallback? onUpgrade; // 仅 quotaBlocked 态用
   final VoidCallback? onSignIn; // 仅 authRequired 态用
   final void Function(String content)? onCopy;
   final VoidCallback? onEdit; // 仅 user done 态用
@@ -246,8 +241,6 @@ class ChatMessageBubble extends StatelessWidget {
             label: AppLocalizations.of(context)!.chatErrorGenerate,
             onTap: onRetry,
           ),
-        if (message.status == ChatMessageStatus.quotaBlocked)
-          _quotaBlockedAction(context),
         if (message.status == ChatMessageStatus.authRequired)
           _inlineAction(
             context,
@@ -259,7 +252,7 @@ class ChatMessageBubble extends StatelessWidget {
     );
   }
 
-  /// 气泡内 inline 操作按钮（重试 / 升级 / 登录）。
+  /// 气泡内 inline 操作按钮（重试 / 登录）。
   Widget _inlineAction(
     BuildContext context, {
     required IconData icon,
@@ -285,54 +278,6 @@ class ChatMessageBubble extends StatelessWidget {
             ),
           ],
         ),
-      ),
-    );
-  }
-
-  /// AI 助手额度用尽时，明确说明升级收益并给出可辨识的主操作按钮。
-  Widget _quotaBlockedAction(BuildContext context) {
-    final l10n = AppLocalizations.of(context)!;
-    final scheme = Theme.of(context).colorScheme;
-    return Padding(
-      padding: const EdgeInsets.only(top: AppSpacing.xs),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                Icons.workspace_premium_outlined,
-                size: 18,
-                color: scheme.error,
-              ),
-              const SizedBox(width: AppSpacing.xs),
-              Flexible(
-                child: Text(
-                  aiQuotaTitleFor(
-                    l10n,
-                    PremiumFeature.aiChat,
-                    message.quotaReason,
-                  ),
-                  style: TextStyle(
-                    color: scheme.error,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: AppSpacing.xs),
-          Text(
-            aiQuotaMessageFor(l10n, message.quotaReason),
-            style: TextStyle(color: scheme.onSurfaceVariant),
-          ),
-          const SizedBox(height: AppSpacing.s),
-          FilledButton(
-            onPressed: onUpgrade,
-            child: Text(l10n.aiQuotaExceededSubscribe),
-          ),
-        ],
       ),
     );
   }

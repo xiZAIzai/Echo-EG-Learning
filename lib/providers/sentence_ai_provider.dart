@@ -13,13 +13,6 @@ import '../services/app_logger.dart';
 
 import '../database/daos/sentence_ai_cache_dao.dart';
 import '../database/providers.dart';
-import '../features/subscription/models/premium_feature.dart';
-import '../features/subscription/models/ai_quota_rejection.dart';
-import '../features/subscription/providers/ai_trial_usage_provider.dart';
-import '../features/subscription/providers/ai_quota_limit_provider.dart';
-import '../features/subscription/providers/feature_access_provider.dart';
-import '../features/subscription/providers/subscription_controller.dart';
-import '../features/subscription/providers/subscription_identity.dart';
 import '../models/sense_group_result.dart';
 import '../models/sentence_ai_result.dart';
 import '../services/sentence_ai_api_client.dart';
@@ -32,34 +25,6 @@ class AiFeatureAuthRequiredException implements Exception {
 
   @override
   String toString() => 'AiFeatureAuthRequiredException';
-}
-
-/// 已登录但未解锁该 AI 功能（非会员且免费试用已用尽）。
-///
-/// 由额度闸在发起 L3 请求前抛出，UI 捕获后引导订阅升级（Paywall）。
-/// 仅在缓存未命中、确需消耗后端算力时触发，已缓存结果不受影响。
-class AiFeatureQuotaExceededException implements Exception {
-  const AiFeatureQuotaExceededException({
-    this.feature,
-    this.resetAt,
-    this.reason = AiQuotaRejectionReason.exhausted,
-  });
-
-  /// 被后端或本地 quota reset 阻断的功能。
-  final PremiumFeature? feature;
-
-  /// 后端返回的本轮免费额度重置时间。
-  final DateTime? resetAt;
-
-  /// 本次请求是额度用尽，还是免费版未开放该功能。
-  final AiQuotaRejectionReason reason;
-
-  @override
-  String toString() =>
-      'AiFeatureQuotaExceededException'
-      '${feature != null ? '(feature=${feature!.name})' : ''}'
-      '(reason=${reason.name})'
-      '${resetAt != null ? '(resetAt=${resetAt!.toIso8601String()})' : ''}';
 }
 
 /// 单个句子解析 L3 请求的共享流。
@@ -220,36 +185,6 @@ class SentenceAiNotifier {
   final SentenceAiCacheDao _cacheDao;
   final SentenceAiApiClient _apiClient;
 
-  /// 额度闸：发起 L3 请求前调用。已登录但未解锁（非会员且免费试用用尽）时
-  /// 抛 [AiFeatureQuotaExceededException]；会员或仍有试用额度则放行。
-  /// 注入而非内联订阅依赖，保持数据层与订阅状态解耦（通过 [PremiumFeature] 中性枚举）。
-  final void Function(PremiumFeature feature)? _guardFeature;
-
-  /// L3 成功后调用：消耗一次免费试用（实现内部对会员不计数）。
-  final void Function(PremiumFeature feature)? _onConsumeTrial;
-
-  /// L3 请求前调用：清理过期 reset、会员清 reset；自动加载可选择尊重本地
-  /// reset 并提前阻断，用户主动点击始终进入后端裁决。
-  final Future<void> Function(
-    PremiumFeature feature, {
-    required bool respectLocalQuotaReset,
-  })?
-  _beforeApiRequest;
-
-  /// 后端返回 quota exceeded 后记录 resetAt。
-  final Future<void> Function(
-    PremiumFeature feature,
-    AiQuotaRejection rejection,
-  )?
-  _onQuotaExceeded;
-
-  /// 后端确认 402 配额超限时调用（E7）：本地若仍 premium 说明权益已过时，
-  /// 由订阅层立即回源对账。与 [_onQuotaExceeded] 不同，本回调不依赖 resetAt。
-  final void Function(PremiumFeature feature)? _onBackendQuotaRejected;
-
-  /// 后端请求成功后清除该功能 reset，说明用户当前已经恢复可用额度。
-  final Future<void> Function(PremiumFeature feature)? _onApiSucceeded;
-
   /// L1 内存缓存
   final Map<String, SentenceTranslation> _translationCache = {};
   final Map<String, SentenceAnalysis> _analysisCache = {};
@@ -263,36 +198,18 @@ class SentenceAiNotifier {
   SentenceAiNotifier({
     required SentenceAiCacheDao cacheDao,
     required SentenceAiApiClient apiClient,
-    void Function(PremiumFeature feature)? guardFeature,
-    void Function(PremiumFeature feature)? onConsumeTrial,
-    Future<void> Function(
-      PremiumFeature feature, {
-      required bool respectLocalQuotaReset,
-    })?
-    beforeApiRequest,
-    Future<void> Function(PremiumFeature feature, AiQuotaRejection rejection)?
-    onQuotaExceeded,
-    void Function(PremiumFeature feature)? onBackendQuotaRejected,
-    Future<void> Function(PremiumFeature feature)? onApiSucceeded,
   }) : _cacheDao = cacheDao,
-       _apiClient = apiClient,
-       _guardFeature = guardFeature,
-       _onConsumeTrial = onConsumeTrial,
-       _beforeApiRequest = beforeApiRequest,
-       _onQuotaExceeded = onQuotaExceeded,
-       _onBackendQuotaRejected = onBackendQuotaRejected,
-       _onApiSucceeded = onApiSucceeded;
+       _apiClient = apiClient;
 
   /// 获取翻译（流式，三级缓存查找，带前后句上下文）
   ///
   /// L1 内存 / L2 SQLite 命中：一次性 yield 完整译文后结束。
   /// 未命中走 L3 流式：`translation` 逐帧 yield 渐显（供 UI 逐词显示），**仅收到完整
-  /// 末帧才**写 L1+L2 并消耗一次试用；中途取消（客户端关流）不落缓存、不计费。
+  /// 末帧才**写 L1+L2；中途取消（客户端关流）不落缓存。
   ///
   /// 只译目标句 [text]，[previous]/[next] 仅作上下文（缺失即首/末句，可为 null），
   /// 且**进入缓存键**（[translationContextHash]）：不同上下文互不串缓存。
-  /// 鉴权/额度：未登录抛 [AiFeatureAuthRequiredException]；后端 402 由内部映射为
-  /// [AiFeatureQuotaExceededException]。[targetLanguage] 为 BCP 47 代码。
+  /// 鉴权：未登录抛 [AiFeatureAuthRequiredException]。[targetLanguage] 为 BCP 47 代码。
   Stream<SentenceTranslation> getTranslationStream(
     String text, {
     required String targetLanguage,
@@ -300,7 +217,6 @@ class SentenceAiNotifier {
     String? next,
     String? accessToken,
     CancelToken? cancelToken,
-    bool respectLocalQuotaReset = false,
   }) async* {
     final hash = translationContextHash(text, previous: previous, next: next);
     final cacheKey = '$hash:$targetLanguage';
@@ -335,11 +251,6 @@ class SentenceAiNotifier {
       AppLogger.log('SentenceAI', '翻译 L3 需要登录，未发现 Supabase access token');
       throw const AiFeatureAuthRequiredException();
     }
-    await _beforeApiRequest?.call(
-      PremiumFeature.aiTranslation,
-      respectLocalQuotaReset: respectLocalQuotaReset,
-    );
-    _guardFeature?.call(PremiumFeature.aiTranslation);
 
     final existing = _pendingTranslations[cacheKey];
     if (existing != null) {
@@ -400,10 +311,7 @@ class SentenceAiNotifier {
             await pending.close();
             return;
           }
-          final mapped = await _backendErrorFor(
-            PremiumFeature.aiTranslation,
-            e,
-          );
+          final mapped = await _backendErrorFor(e);
           if (mapped != null) {
             await pending.addError(mapped, stackTrace);
             return;
@@ -428,7 +336,7 @@ class SentenceAiNotifier {
         }
       }
 
-      // 仅「完整完成」且译文非空才落缓存并计一次试用；未收到 final（取消/EOF）不写。
+      // 仅「完整完成」且译文非空才落缓存；未收到 final（取消/EOF）不写。
       if (finalTranslation != null && finalTranslation.translation.isNotEmpty) {
         _translationCache[cacheKey] = finalTranslation;
         await _cacheDao.upsert(
@@ -436,8 +344,6 @@ class SentenceAiNotifier {
           l2Type,
           jsonEncode({'translation': finalTranslation.translation}),
         );
-        await _onApiSucceeded?.call(PremiumFeature.aiTranslation);
-        _onConsumeTrial?.call(PremiumFeature.aiTranslation);
       }
       await pending.close();
     } catch (e, stackTrace) {
@@ -455,16 +361,14 @@ class SentenceAiNotifier {
   ///
   /// L1 内存 / L2 SQLite 命中：一次性 yield 完整结果后结束。
   /// 未命中走 L3 流式：逐帧 yield 部分结果（供 UI 渐显），**仅收到完整末帧才**
-  /// 写 L1+L2 并消耗一次试用；中途取消（客户端关流）不落缓存、不计费。
+  /// 写 L1+L2；中途取消（客户端关流）不落缓存。
   ///
-  /// 鉴权/额度：未登录抛 [AiFeatureAuthRequiredException]；后端 402 由内部映射为
-  /// [AiFeatureQuotaExceededException]。[targetLanguage] 为 BCP 47 代码。
+/// 鉴权：未登录抛 [AiFeatureAuthRequiredException]。
   Stream<SentenceAnalysis> getAnalysisStream(
     String text, {
     required String targetLanguage,
     String? accessToken,
     CancelToken? cancelToken,
-    bool respectLocalQuotaReset = false,
   }) async* {
     final hash = hashText(text);
     final cacheKey = '$hash:$targetLanguage';
@@ -499,11 +403,6 @@ class SentenceAiNotifier {
       AppLogger.log('SentenceAI', '解析 L3 需要登录，未发现 Supabase access token');
       throw const AiFeatureAuthRequiredException();
     }
-    await _beforeApiRequest?.call(
-      PremiumFeature.aiAnalysis,
-      respectLocalQuotaReset: respectLocalQuotaReset,
-    );
-    _guardFeature?.call(PremiumFeature.aiAnalysis);
 
     final existing = _pendingAnalyses[cacheKey];
     if (existing != null) {
@@ -558,7 +457,7 @@ class SentenceAiNotifier {
             await pending.close();
             return;
           }
-          final mapped = await _backendErrorFor(PremiumFeature.aiAnalysis, e);
+          final mapped = await _backendErrorFor(e);
           if (mapped != null) {
             await pending.addError(mapped, stackTrace);
             return;
@@ -583,7 +482,7 @@ class SentenceAiNotifier {
         }
       }
 
-      // 仅「完整完成」且解析非空才落缓存并计一次试用；空解析允许后续重试。
+      // 仅「完整完成」且解析非空才落缓存；空解析允许后续重试。
       if (finalAnalysis != null && finalAnalysis.isNotEmpty) {
         _analysisCache[cacheKey] = finalAnalysis;
         await _cacheDao.upsert(
@@ -591,8 +490,6 @@ class SentenceAiNotifier {
           l2Type,
           jsonEncode(finalAnalysis.toJson()),
         );
-        await _onApiSucceeded?.call(PremiumFeature.aiAnalysis);
-        _onConsumeTrial?.call(PremiumFeature.aiAnalysis);
       } else if (finalAnalysis != null) {
         AppLogger.log('SentenceAI', '解析最终结果为空，不落缓存（可重试）');
       }
@@ -612,16 +509,14 @@ class SentenceAiNotifier {
   ///
   /// L1 内存 / L2 SQLite 命中：一次性 yield 完整结果后结束。
   /// 未命中走 L3 流式：medium 意群逐帧渐显（fine 随后），**仅收到完整末帧且 concat 校验通过才**
-  /// 写 L1+L2 并消耗一次试用；中途取消（客户端关流）或校验失败一律不落缓存、不计费。
+  /// 写 L1+L2；中途取消（客户端关流）或校验失败一律不落缓存。
   ///
   /// 意群与目标语言无关（chunk 是原句子串的切分），缓存 key 仅 [hashText]，无语言维度。
-  /// 鉴权/额度：未登录抛 [AiFeatureAuthRequiredException]；后端 402 由内部映射为
-  /// [AiFeatureQuotaExceededException]。
+/// 鉴权：未登录抛 [AiFeatureAuthRequiredException]。
   Stream<SenseGroupResult> getSenseGroupsStream(
     String text, {
     String? accessToken,
     CancelToken? cancelToken,
-    bool respectLocalQuotaReset = false,
   }) async* {
     final hash = hashText(text);
 
@@ -660,11 +555,6 @@ class SentenceAiNotifier {
       AppLogger.log('SenseGroup', 'L3 需要登录，未发现 Supabase access token');
       throw const AiFeatureAuthRequiredException();
     }
-    await _beforeApiRequest?.call(
-      PremiumFeature.aiSenseGroup,
-      respectLocalQuotaReset: respectLocalQuotaReset,
-    );
-    _guardFeature?.call(PremiumFeature.aiSenseGroup);
 
     final existing = _pendingSenseGroups[hash];
     if (existing != null) {
@@ -712,7 +602,7 @@ class SentenceAiNotifier {
             await pending.close();
             return;
           }
-          final mapped = await _backendErrorFor(PremiumFeature.aiSenseGroup, e);
+          final mapped = await _backendErrorFor(e);
           if (mapped != null) {
             await pending.addError(mapped, stackTrace);
             return;
@@ -737,7 +627,7 @@ class SentenceAiNotifier {
         }
       }
 
-      // 仅「完整完成」且 medium 非空、concat 校验通过（两级粒度拼接均能还原原句）才落缓存并计一次试用。
+      // 仅「完整完成」且 medium 非空、concat 校验通过（两级粒度拼接均能还原原句）才落缓存。
       // 校验失败/空/未收到 final（取消/EOF）一律不写——允许重试重生成，镜像后端 onComplete「不合法不入库」。
       if (finalResult != null &&
           finalResult.medium.isNotEmpty &&
@@ -749,8 +639,6 @@ class SentenceAiNotifier {
           'sense_groups',
           jsonEncode(finalResult.toJson()),
         );
-        await _onApiSucceeded?.call(PremiumFeature.aiSenseGroup);
-        _onConsumeTrial?.call(PremiumFeature.aiSenseGroup);
       } else if (finalResult != null) {
         AppLogger.log('SenseGroup', '最终结果空或 concat 校验失败，不落缓存（可重试）');
       }
@@ -899,87 +787,21 @@ class SentenceAiNotifier {
 
   /// 把后端已定义语义的状态码映射为业务异常（客户端按状态码分别反应）：
   /// - 401 → [AiFeatureAuthRequiredException]：登录态缺失/失效，UI 引导重新登录；
-  /// - 402 quota_exceeded → [AiFeatureQuotaExceededException]：UI 引导订阅，
-  ///   同时触发 E7 权益分歧收敛；
-  /// - 其它（403 / 5xx / 网络）→ null：交由调用方重试或按通用错误处理。
-  Future<Exception?> _backendErrorFor(
-    PremiumFeature feature,
-    DioException error,
-  ) async {
+  /// - 其它（402 / 403 / 5xx / 网络）→ null：交由调用方重试或按通用错误处理。
+  Future<Exception?> _backendErrorFor(DioException error) async {
     final statusCode = error.response?.statusCode;
     if (statusCode == 401) {
-      AppLogger.log('SentenceAI', '后端 401：登录态失效，转登录引导 feature=${feature.name}');
+      AppLogger.log('SentenceAI', '后端 401：登录态失效，转登录引导');
       return const AiFeatureAuthRequiredException();
     }
-    if (statusCode != 402) return null;
-    final data = error.response?.data;
-    if (data is Map && data['code'] != 'quota_exceeded') return null;
-    // E7：后端权威裁决为「无额度」；本地若仍 premium 由订阅层收敛分歧。
-    _onBackendQuotaRejected?.call(feature);
-    final rejection = AiQuotaRejection.fromResponseData(data);
-    if (rejection.resetAt != null) {
-      await _onQuotaExceeded?.call(feature, rejection);
-    }
-    return AiFeatureQuotaExceededException(
-      feature: feature,
-      resetAt: rejection.resetAt,
-      reason: rejection.reason,
-    );
+    return null;
   }
 }
 
 /// SentenceAiNotifier Provider
 final sentenceAiNotifierProvider = Provider<SentenceAiNotifier>((ref) {
-  ref.watch(aiQuotaLimitCleanupProvider);
   return SentenceAiNotifier(
     cacheDao: ref.watch(sentenceAiCacheDaoProvider),
     apiClient: ref.watch(sentenceAiApiClientProvider),
-    // 额度闸：已登录前提下未解锁（非会员且试用用尽）→ 抛配额超限。
-    guardFeature: (feature) {
-      if (!ref.read(featureAccessProvider(feature))) {
-        throw AiFeatureQuotaExceededException(feature: feature);
-      }
-    },
-    // 消耗一次免费试用；会员无限不计数。
-    onConsumeTrial: (feature) {
-      if (ref.read(subscriptionControllerProvider).isActive) return;
-      ref.read(aiTrialUsageProvider.notifier).consume(feature);
-    },
-    beforeApiRequest: (feature, {required respectLocalQuotaReset}) async {
-      final userId = ref.read(subscriptionIdentityProvider).userId;
-      if (userId == null) return;
-      final store = ref.read(aiQuotaLimitStoreProvider);
-      if (ref.read(subscriptionControllerProvider).isActive) {
-        await store.clearAllResets(userId);
-        return;
-      }
-      await store.clearExpiredResets(userId);
-      if (!respectLocalQuotaReset) return;
-      final rejection = store.activeRejection(userId, feature);
-      if (rejection != null) {
-        throw AiFeatureQuotaExceededException(
-          feature: feature,
-          resetAt: rejection.resetAt,
-          reason: rejection.reason,
-        );
-      }
-    },
-    onQuotaExceeded: (feature, rejection) async {
-      final userId = ref.read(subscriptionIdentityProvider).userId;
-      final resetAt = rejection.resetAt;
-      if (userId == null || resetAt == null) return;
-      await ref
-          .read(aiQuotaLimitStoreProvider)
-          .recordResetAt(userId, feature, resetAt, reason: rejection.reason);
-    },
-    // E7：后端 402 与本地 premium 分歧时回源对账（handler 内部判 isActive）。
-    onBackendQuotaRejected: (feature) => ref.read(
-      entitlementQuotaDivergenceHandlerProvider,
-    )('sentenceAi:${feature.name}'),
-    onApiSucceeded: (feature) async {
-      final userId = ref.read(subscriptionIdentityProvider).userId;
-      if (userId == null) return;
-      await ref.read(aiQuotaLimitStoreProvider).clearReset(userId, feature);
-    },
   );
 });

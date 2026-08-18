@@ -526,7 +526,7 @@ class SentenceAnnotationCardState extends State<SentenceAnnotationCard> {
   ///
   /// 未命中缓存时订阅译文流：首帧前显示 shimmer，随后逐帧 setState 渐显（逐词显示，
   /// 与流式解析一致）。返回的 Future 在流结束（完成/出错）时 settle，供按钮收起
-  /// loading。auth/quota 异常向上抛出交由 glue 弹登录/订阅。
+  /// loading。auth 异常向上抛出交由 glue 弹登录。
   Future<void> _onTapTranslation() async {
     widget.onTranslationUserIntent?.call();
     await _requestTranslation(automatic: false);
@@ -623,8 +623,7 @@ class SentenceAnnotationCardState extends State<SentenceAnnotationCard> {
         _resetTranslationAfterEmptyRequest(source);
       }
     } catch (error) {
-      if (error is AiFeatureAuthRequiredException ||
-          error is AiFeatureQuotaExceededException) {
+      if (error is AiFeatureAuthRequiredException) {
         _resetTranslationAfterBlockedRequest();
         AppLogger.log(
           'SentenceAnnotation',
@@ -667,7 +666,7 @@ class SentenceAnnotationCardState extends State<SentenceAnnotationCard> {
     AppLogger.log('SentenceAnnotation', '翻译请求无内容结束: source=$source');
   }
 
-  /// 登录或额度门槛阻断请求时，恢复翻译区域到可重新点击的初始状态。
+  /// 登录门槛阻断请求时，恢复翻译区域到可重新点击的初始状态。
   void _resetTranslationAfterBlockedRequest() {
     if (!mounted) return;
     setState(() {
@@ -683,7 +682,7 @@ class SentenceAnnotationCardState extends State<SentenceAnnotationCard> {
   ///
   /// 未命中缓存时订阅结构化解析流：首帧前显示 shimmer，随后逐帧 setState 自上而下
   /// 渐显（与流式查词一致）。返回的 Future 在流结束（完成/出错）时 settle，供按钮
-  /// 收起 loading。auth/quota 异常向上抛出交由 glue 弹登录/订阅。
+  /// 收起 loading。auth 异常向上抛出交由 glue 弹登录。
   Future<void> _onTapAnalysis() async {
     widget.onAnalysisUserIntent?.call();
     await _requestAnalysis(automatic: false);
@@ -777,8 +776,7 @@ class SentenceAnnotationCardState extends State<SentenceAnnotationCard> {
         _resetAnalysisAfterEmptyRequest(source);
       }
     } catch (error) {
-      if (error is AiFeatureAuthRequiredException ||
-          error is AiFeatureQuotaExceededException) {
+      if (error is AiFeatureAuthRequiredException) {
         _resetAnalysisAfterBlockedRequest();
         AppLogger.log(
           'SentenceAnnotation',
@@ -821,7 +819,7 @@ class SentenceAnnotationCardState extends State<SentenceAnnotationCard> {
     AppLogger.log('SentenceAnnotation', '解析请求无内容结束: source=$source');
   }
 
-  /// 登录或额度门槛阻断请求时，恢复解析区域到可重新点击的初始状态。
+  /// 登录门槛阻断请求时，恢复解析区域到可重新点击的初始状态。
   void _resetAnalysisAfterBlockedRequest() {
     if (!mounted) return;
     setState(() {

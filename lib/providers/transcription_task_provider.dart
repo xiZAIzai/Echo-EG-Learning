@@ -21,9 +21,6 @@ import '../features/audio_import/audio_finalization_service.dart';
 import '../features/audio_import/audio_transcode_service.dart';
 import '../features/audio_import/transcription_audio_extractor.dart';
 import '../features/remote_config/remote_config_providers.dart';
-import '../features/subscription/providers/subscription_controller.dart'
-    show entitlementQuotaDivergenceHandlerProvider;
-import '../features/subscription/models/ai_quota_rejection.dart';
 import '../models/audio_item.dart';
 import '../models/word_timestamp.dart';
 import '../providers/audio_library_provider.dart';
@@ -123,15 +120,6 @@ class TranscriptionFailed extends TranscriptionTaskState {
 /// 转录成功但无语音内容（音乐/背景音）
 class TranscriptionEmptyResult extends TranscriptionTaskState {
   const TranscriptionEmptyResult();
-}
-
-/// 本月免费额度用尽（后端返回 402）——由 UI 引导订阅升级。
-class TranscriptionQuotaExceeded extends TranscriptionTaskState {
-  const TranscriptionQuotaExceeded({
-    this.reason = AiQuotaRejectionReason.exhausted,
-  });
-
-  final AiQuotaRejectionReason reason;
 }
 
 // ─── Provider ──────────────────────────────────────────────
@@ -360,17 +348,6 @@ class TranscriptionTaskManager extends _$TranscriptionTaskManager {
         '❌ 转录失败(Dio) | type=${e.type} status=${e.response?.statusCode} '
             'msg=${e.message ?? e.error} body=${e.response?.data}',
       );
-      // 后端本月免费额度用尽 → 交由 UI 引导订阅（区别于普通失败的重试提示）。
-      if (e.response?.statusCode == 402) {
-        // E7：后端 402 与本地 premium 分歧时回源对账（handler 内部判 isActive）。
-        ref.read(entitlementQuotaDivergenceHandlerProvider)('transcription');
-        final rejection = AiQuotaRejection.fromResponseData(e.response?.data);
-        _updateState(
-          audioId,
-          TranscriptionQuotaExceeded(reason: rejection.reason),
-        );
-        return;
-      }
       _updateState(
         audioId,
         TranscriptionFailed(message: _userFriendlyError(e)),

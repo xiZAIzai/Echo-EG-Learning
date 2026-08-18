@@ -16,9 +16,6 @@ import 'package:echo_loop/database/providers.dart';
 import 'package:echo_loop/features/auth/providers/auth_providers.dart';
 import 'package:echo_loop/features/remote_config/remote_config.dart';
 import 'package:echo_loop/features/remote_config/remote_config_providers.dart';
-import 'package:echo_loop/features/subscription/models/premium_feature.dart';
-import 'package:echo_loop/features/subscription/models/ai_quota_rejection.dart';
-import 'package:echo_loop/features/subscription/providers/subscription_availability.dart';
 import 'package:echo_loop/l10n/app_localizations.dart';
 import 'package:echo_loop/models/sense_group_result.dart';
 import 'package:echo_loop/models/sense_group_range_playback.dart';
@@ -36,66 +33,6 @@ import '../helpers/mock_providers.dart';
 
 class _NoopSentenceAiApiClient extends SentenceAiApiClient {
   _NoopSentenceAiApiClient() : super.withDio(_UnusedDio());
-}
-
-class _QuotaSentenceAiNotifier extends SentenceAiNotifier {
-  _QuotaSentenceAiNotifier({
-    required super.cacheDao,
-    required super.apiClient,
-    this.reason = AiQuotaRejectionReason.exhausted,
-  });
-
-  final AiQuotaRejectionReason reason;
-
-  final translationRespectLocalQuotaResetValues = <bool>[];
-  final analysisRespectLocalQuotaResetValues = <bool>[];
-  final senseGroupRespectLocalQuotaResetValues = <bool>[];
-
-  @override
-  Stream<SentenceTranslation> getTranslationStream(
-    String text, {
-    required String targetLanguage,
-    String? previous,
-    String? next,
-    String? accessToken,
-    CancelToken? cancelToken,
-    bool respectLocalQuotaReset = false,
-  }) async* {
-    translationRespectLocalQuotaResetValues.add(respectLocalQuotaReset);
-    throw AiFeatureQuotaExceededException(
-      feature: PremiumFeature.aiTranslation,
-      reason: reason,
-    );
-  }
-
-  @override
-  Stream<SentenceAnalysis> getAnalysisStream(
-    String text, {
-    required String targetLanguage,
-    String? accessToken,
-    CancelToken? cancelToken,
-    bool respectLocalQuotaReset = false,
-  }) async* {
-    analysisRespectLocalQuotaResetValues.add(respectLocalQuotaReset);
-    throw AiFeatureQuotaExceededException(
-      feature: PremiumFeature.aiAnalysis,
-      reason: reason,
-    );
-  }
-
-  @override
-  Stream<SenseGroupResult> getSenseGroupsStream(
-    String text, {
-    String? accessToken,
-    CancelToken? cancelToken,
-    bool respectLocalQuotaReset = false,
-  }) async* {
-    senseGroupRespectLocalQuotaResetValues.add(respectLocalQuotaReset);
-    throw AiFeatureQuotaExceededException(
-      feature: PremiumFeature.aiSenseGroup,
-      reason: reason,
-    );
-  }
 }
 
 class _RecordingSentenceAiNotifier extends SentenceAiNotifier {
@@ -116,7 +53,6 @@ class _RecordingSentenceAiNotifier extends SentenceAiNotifier {
     String? next,
     String? accessToken,
     CancelToken? cancelToken,
-    bool respectLocalQuotaReset = false,
   }) async* {
     translationRequests.add((previous: previous, next: next));
     yield const SentenceTranslation(translation: 'cached-chain translation');
@@ -128,7 +64,6 @@ class _RecordingSentenceAiNotifier extends SentenceAiNotifier {
     required String targetLanguage,
     String? accessToken,
     CancelToken? cancelToken,
-    bool respectLocalQuotaReset = false,
   }) async* {
     analysisRequests++;
     yield const SentenceAnalysis(
@@ -141,7 +76,6 @@ class _RecordingSentenceAiNotifier extends SentenceAiNotifier {
     String text, {
     String? accessToken,
     CancelToken? cancelToken,
-    bool respectLocalQuotaReset = false,
   }) async* {
     senseGroupRequests++;
     yield const SenseGroupResult(
@@ -162,7 +96,6 @@ class _TwoGroupSentenceAiNotifier extends _RecordingSentenceAiNotifier {
     String text, {
     String? accessToken,
     CancelToken? cancelToken,
-    bool respectLocalQuotaReset = false,
   }) async* {
     yield const SenseGroupResult(
       medium: ['Hello', 'world'],
@@ -254,11 +187,6 @@ void main() {
           path: AppRoutes.login,
           builder: (context, state) => const Scaffold(body: Text('Login page')),
         ),
-        GoRoute(
-          path: AppRoutes.paywall,
-          builder: (context, state) =>
-              const Scaffold(body: Text('Paywall page')),
-        ),
       ],
     );
 
@@ -278,7 +206,6 @@ void main() {
             (ref) => Stream<Session?>.value(signedIn ? testSession() : null),
           ),
           savedSenseGroupDaoProvider.overrideWithValue(savedSenseGroupDao),
-          subscriptionAvailabilityProvider.overrideWithValue(true),
           ...extraOverrides,
         ],
         child: MaterialApp.router(
@@ -378,181 +305,6 @@ void main() {
     expect(find.text('Sign in to use AI features'), findsOneWidget);
     expect(find.text('Cancel'), findsOneWidget);
     expect(find.text('Sign In'), findsOneWidget);
-  });
-
-  for (final button in ['Translation', 'Analysis']) {
-    testWidgets('$button 超出额度时先弹提醒，点击订阅后进入订阅页', (tester) async {
-      final cacheDao = _MockCacheDao();
-      final savedSenseGroupDao = _MockSavedSenseGroupDao();
-      when(
-        () => cacheDao.getByHash(any(), any()),
-      ).thenAnswer((_) async => null);
-      when(
-        savedSenseGroupDao.watchSavedPhraseTexts,
-      ).thenAnswer((_) => Stream<Set<String>>.value(const {}));
-
-      final aiNotifier = _QuotaSentenceAiNotifier(
-        cacheDao: cacheDao,
-        apiClient: _NoopSentenceAiApiClient(),
-      );
-      await pumpAuthTestApp(
-        tester,
-        cacheDao: cacheDao,
-        savedSenseGroupDao: savedSenseGroupDao,
-        aiNotifier: aiNotifier,
-      );
-
-      final buttonKey = button == 'Translation' ? 'translation' : 'analysis';
-      await tester.tap(find.byKey(ValueKey(buttonKey)));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 300));
-
-      final respectLocalQuotaResetValues = button == 'Translation'
-          ? aiNotifier.translationRespectLocalQuotaResetValues
-          : aiNotifier.analysisRespectLocalQuotaResetValues;
-      final quotaTitle = button == 'Translation'
-          ? "This month's free AI translation quota is used up"
-          : "This month's free AI sentence analysis quota is used up";
-      expect(respectLocalQuotaResetValues, [false]);
-      expect(find.text(quotaTitle), findsOneWidget);
-      final dialogTitle = tester.widget<Text>(find.text(quotaTitle));
-      final dialogTheme = Theme.of(tester.element(find.byType(AlertDialog)));
-      expect(dialogTitle.style, dialogTheme.textTheme.titleLarge);
-      expect(find.text('Got it'), findsOneWidget);
-      expect(find.text('Upgrade Now'), findsOneWidget);
-      expect(find.text('Paywall page'), findsNothing);
-
-      await tester.tap(find.text('Upgrade Now'));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 300));
-
-      expect(find.text('Paywall page'), findsOneWidget);
-    });
-  }
-
-  testWidgets('后端 limit=0 时句子 AI 弹窗显示免费版不支持文案', (tester) async {
-    final cacheDao = _MockCacheDao();
-    final savedSenseGroupDao = _MockSavedSenseGroupDao();
-    when(() => cacheDao.getByHash(any(), any())).thenAnswer((_) async => null);
-    when(
-      savedSenseGroupDao.watchSavedPhraseTexts,
-    ).thenAnswer((_) => Stream<Set<String>>.value(const {}));
-
-    await pumpAuthTestApp(
-      tester,
-      cacheDao: cacheDao,
-      savedSenseGroupDao: savedSenseGroupDao,
-      aiNotifier: _QuotaSentenceAiNotifier(
-        cacheDao: cacheDao,
-        apiClient: _NoopSentenceAiApiClient(),
-        reason: AiQuotaRejectionReason.unsupportedForFreePlan,
-      ),
-    );
-
-    await tester.tap(find.byKey(const ValueKey('translation')));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 300));
-
-    expect(
-      find.text("The free plan doesn't support AI translation"),
-      findsOneWidget,
-    );
-    expect(
-      find.text('Upgrade to unlock this feature and more AI features.'),
-      findsOneWidget,
-    );
-  });
-
-  testWidgets('手动点击超额弹窗关闭后，按钮可再次点击并再次弹窗', (tester) async {
-    final cacheDao = _MockCacheDao();
-    final savedSenseGroupDao = _MockSavedSenseGroupDao();
-    when(() => cacheDao.getByHash(any(), any())).thenAnswer((_) async => null);
-    when(
-      savedSenseGroupDao.watchSavedPhraseTexts,
-    ).thenAnswer((_) => Stream<Set<String>>.value(const {}));
-
-    await pumpAuthTestApp(
-      tester,
-      cacheDao: cacheDao,
-      savedSenseGroupDao: savedSenseGroupDao,
-      aiNotifier: _QuotaSentenceAiNotifier(
-        cacheDao: cacheDao,
-        apiClient: _NoopSentenceAiApiClient(),
-      ),
-    );
-
-    await tester.tap(find.byKey(const ValueKey('translation')));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 300));
-
-    expect(
-      find.text("This month's free AI translation quota is used up"),
-      findsOneWidget,
-    );
-
-    await tester.tap(find.text('Got it'));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 300));
-
-    expect(
-      find.text("This month's free AI translation quota is used up"),
-      findsNothing,
-    );
-
-    await tester.tap(find.byKey(const ValueKey('translation')));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 300));
-
-    expect(
-      find.text("This month's free AI translation quota is used up"),
-      findsOneWidget,
-    );
-  });
-
-  testWidgets('手动点击意群超额时也强制弹窗并允许再次弹窗', (tester) async {
-    final cacheDao = _MockCacheDao();
-    final savedSenseGroupDao = _MockSavedSenseGroupDao();
-    when(() => cacheDao.getByHash(any(), any())).thenAnswer((_) async => null);
-    when(
-      savedSenseGroupDao.watchSavedPhraseTexts,
-    ).thenAnswer((_) => Stream<Set<String>>.value(const {}));
-
-    await pumpAuthTestApp(
-      tester,
-      cacheDao: cacheDao,
-      savedSenseGroupDao: savedSenseGroupDao,
-      aiNotifier: _QuotaSentenceAiNotifier(
-        cacheDao: cacheDao,
-        apiClient: _NoopSentenceAiApiClient(),
-      ),
-    );
-
-    await tester.tap(find.byKey(const ValueKey('senseGroup')));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 300));
-
-    expect(
-      find.text("This month's free AI sentence chunking quota is used up"),
-      findsOneWidget,
-    );
-
-    await tester.tap(find.text('Got it'));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 300));
-
-    expect(
-      find.text("This month's free AI sentence chunking quota is used up"),
-      findsNothing,
-    );
-
-    await tester.tap(find.byKey(const ValueKey('senseGroup')));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 300));
-
-    expect(
-      find.text("This month's free AI sentence chunking quota is used up"),
-      findsOneWidget,
-    );
   });
 
   testWidgets('点击意群 AI 后立即关闭操作栏并打开词典面板', (tester) async {
@@ -719,41 +471,6 @@ void main() {
       find.byKey(const Key('selection_toolbar_button_Unsave')),
       findsOneWidget,
     );
-  });
-
-  testWidgets('自动加载翻译和解析同时超额时只展示一个弹窗', (tester) async {
-    final cacheDao = _MockCacheDao();
-    final savedSenseGroupDao = _MockSavedSenseGroupDao();
-    when(() => cacheDao.getByHash(any(), any())).thenAnswer((_) async => null);
-    when(
-      savedSenseGroupDao.watchSavedPhraseTexts,
-    ).thenAnswer((_) => Stream<Set<String>>.value(const {}));
-
-    final aiNotifier = _QuotaSentenceAiNotifier(
-      cacheDao: cacheDao,
-      apiClient: _NoopSentenceAiApiClient(),
-    );
-    await pumpAuthTestApp(
-      tester,
-      cacheDao: cacheDao,
-      savedSenseGroupDao: savedSenseGroupDao,
-      signedIn: true,
-      autoLoadSentenceAi: true,
-      aiNotifier: aiNotifier,
-    );
-
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 300));
-
-    expect(find.byType(AlertDialog), findsOneWidget);
-    expect(
-      find.text("This month's free AI sentence analysis quota is used up"),
-      findsOneWidget,
-    );
-    expect(find.text('Got it'), findsOneWidget);
-    expect(find.text('Upgrade Now'), findsOneWidget);
-    expect(aiNotifier.translationRespectLocalQuotaResetValues, [true]);
-    expect(aiNotifier.analysisRespectLocalQuotaResetValues, [true]);
   });
 
   testWidgets('默认自动显示解析和翻译，但不自动请求意群', (tester) async {

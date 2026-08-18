@@ -17,11 +17,6 @@ import '../../../analytics/models/event_names.dart';
 import '../../../providers/settings_provider.dart';
 import '../../../services/app_logger.dart';
 import '../../auth/providers/auth_providers.dart';
-import '../../subscription/models/premium_feature.dart';
-import '../../subscription/models/ai_quota_rejection.dart';
-import '../../subscription/providers/ai_trial_usage_provider.dart';
-import '../../subscription/providers/feature_access_provider.dart';
-import '../../subscription/providers/subscription_controller.dart';
 import '../models/chat_message.dart';
 import '../models/chat_role.dart';
 import '../models/chatbot_config.dart';
@@ -141,9 +136,7 @@ class ChatSessionController extends _$ChatSessionController {
   /// 发起一轮（send/retry 共用）：闸门 → 追加 user+占位 → 流式。
   /// [quote] 为追问引用原文（可选），随 user 消息保存。
   Future<void> _startTurn(String userText, {String? quote}) async {
-    // 1) 闸门（gate 是 banner 的唯一数据源）。
-    //    注意：当前 freeAllowancePolicy 为 AlwaysAllowPolicy（恒放行），本地额度预测在
-    //    现网是前向兼容的死分支；额度唯一权威是后端 402。
+    // 1) 登录闸门（gate 是 banner 的唯一数据源）。
     if (!ref.read(isAuthenticatedProvider)) {
       state = state.copyWith(gate: ChatGate.authRequired);
       return;
@@ -154,10 +147,6 @@ class ChatSessionController extends _$ChatSessionController {
         ?.accessToken;
     if (accessToken == null || accessToken.isEmpty) {
       state = state.copyWith(gate: ChatGate.authRequired);
-      return;
-    }
-    if (!ref.read(featureAccessProvider(PremiumFeature.aiChat))) {
-      state = state.copyWith(gate: ChatGate.quotaExceeded);
       return;
     }
 
@@ -216,7 +205,6 @@ class ChatSessionController extends _$ChatSessionController {
         _updateBot(botId, frame.text); // 只改这条 assistant content
         if (frame.isFinal) {
           _finishTurn(botId, ChatMessageStatus.done);
-          _consumeTrial(); // 成功计一次（会员不计；本地预测计数，权威在后端）
           return;
         }
       }
@@ -231,18 +219,16 @@ class ChatSessionController extends _$ChatSessionController {
     } catch (e) {
       if (_disposed || seq != _seq) return;
       final status = _mapRunError(e);
-      final quotaReason = _quotaReasonFor(e);
       // 用户主动取消（cancel→done）不算失败，不打 error 日志。
       if (status != ChatMessageStatus.done) {
         _log('流式失败 botId=$botId status=$status error=$e');
       }
-      _finishTurn(botId, status, quotaReason: quotaReason);
+      _finishTurn(botId, status);
     }
   }
 
   /// 异常 → 该条 assistant 消息的终态（气泡 inline 表达，不设会话级错误）。
   /// - DioException(cancel)（用户停止）→ done，保留已生成部分；
-  /// - DioException(402)（额度权威判定）→ quotaBlocked（气泡 inline 升级入口）；
   /// - ChatAuthRequiredException(401，token 过期/服务端判未登录)→ authRequired
   ///   （气泡 inline 登录引导）；
   /// - ChatStreamException / 其余 → error。
@@ -250,27 +236,10 @@ class ChatSessionController extends _$ChatSessionController {
     if (e is DioException && e.type == DioExceptionType.cancel) {
       return ChatMessageStatus.done;
     }
-    if (e is DioException && e.response?.statusCode == 402) {
-      return ChatMessageStatus.quotaBlocked;
-    }
     if (e is ChatAuthRequiredException) {
       return ChatMessageStatus.authRequired;
     }
     return ChatMessageStatus.error;
-  }
-
-  /// 只有后端明确返回 `quota.limit == 0` 时，才改用免费版不支持文案。
-  AiQuotaRejectionReason _quotaReasonFor(Object error) {
-    if (error is! DioException || error.response?.statusCode != 402) {
-      return AiQuotaRejectionReason.exhausted;
-    }
-    return AiQuotaRejection.fromResponseData(error.response?.data).reason;
-  }
-
-  /// 成功后消耗一次免费试用（会员不计）。
-  void _consumeTrial() {
-    if (ref.read(subscriptionControllerProvider).isActive) return;
-    ref.read(aiTrialUsageProvider.notifier).consume(PremiumFeature.aiChat);
   }
 
   /// 组装发后端的历史：剔除 greeting / 占位 / 失败消息，取最近 [_historyLimit] 条。
@@ -297,11 +266,7 @@ class ChatSessionController extends _$ChatSessionController {
   ///
   /// 特例：status==done 且 content 仍为空（首 token 前即停止）→ 直接移除该占位，
   /// 避免留下一条空气泡。
-  void _finishTurn(
-    String id,
-    ChatMessageStatus status, {
-    AiQuotaRejectionReason quotaReason = AiQuotaRejectionReason.exhausted,
-  }) {
+  void _finishTurn(String id, ChatMessageStatus status) {
     final target = state.messages.where((m) => m.id == id).firstOrNull;
     final removeEmpty =
         status == ChatMessageStatus.done &&
@@ -312,7 +277,7 @@ class ChatSessionController extends _$ChatSessionController {
       if (m.id != id) {
         next.add(m); // 非目标消息原样保留
       } else if (!removeEmpty) {
-        next.add(m.copyWith(status: status, quotaReason: quotaReason));
+        next.add(m.copyWith(status: status));
       }
       // removeEmpty && 目标 → 跳过（移除空占位）
     }
@@ -322,7 +287,6 @@ class ChatSessionController extends _$ChatSessionController {
         : switch (status) {
             ChatMessageStatus.done => 'completed',
             ChatMessageStatus.authRequired => 'auth_required',
-            ChatMessageStatus.quotaBlocked => 'quota_blocked',
             _ => 'failed',
           };
     ref.read(analyticsServiceProvider).track(Events.chatTurnResult, {

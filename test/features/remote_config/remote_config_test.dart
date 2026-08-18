@@ -31,7 +31,6 @@ void main() {
         },
         'features': {
           'cloudDriveImport': {'enabled': true, 'ignored': 'x'},
-          'showStoreWebCheckoutFallback': {'enabled': true},
           'aiChatAssistant': {'enabled': false},
         },
         'limits': {
@@ -47,10 +46,6 @@ void main() {
       expect(config.ttlSeconds, 600);
       expect(config.context.countryCode, 'CN');
       expect(config.isEnabled(RemoteFeature.cloudDriveImport), isTrue);
-      expect(
-        config.isEnabled(RemoteFeature.showStoreWebCheckoutFallback),
-        isTrue,
-      );
       expect(config.isEnabled(RemoteFeature.aiChatAssistant), isFalse);
       expect(config.transcriptionLimits.maxDurationSeconds, 3600);
       expect(config.transcriptionLimits.maxUploadBytes, 104857600);
@@ -59,10 +54,6 @@ void main() {
     test('缺字段和未知版本回退本地默认，AI 聊天入口默认开启', () {
       final missing = RemoteConfig.fromJson({'version': 1});
       expect(missing.isEnabled(RemoteFeature.cloudDriveImport), isFalse);
-      expect(
-        missing.isEnabled(RemoteFeature.showStoreWebCheckoutFallback),
-        isFalse,
-      );
       expect(missing.isEnabled(RemoteFeature.aiChatAssistant), isTrue);
       expect(missing.ttlSeconds, RemoteConfig.defaultTtlSeconds);
       expect(RemoteConfig.defaultTtlSeconds, 86400);

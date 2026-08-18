@@ -8,9 +8,6 @@ enum RemoteFeature {
   /// 从网盘导入总入口；当前 provider 只有百度网盘，但开关不绑定具体 provider。
   cloudDriveImport,
 
-  /// 商店包 Paywall 是否展示切换到 Web 支付的兜底入口。
-  showStoreWebCheckoutFallback,
-
   /// 是否显示 AI 聊天助手入口；全球默认开启，远程配置可一键关闭。
   aiChatAssistant,
 }
@@ -58,14 +55,10 @@ class RemoteFeatureConfig {
 class RemoteConfigFeatures {
   const RemoteConfigFeatures({
     this.cloudDriveImport = const RemoteFeatureConfig(enabled: false),
-    this.showStoreWebCheckoutFallback = const RemoteFeatureConfig(
-      enabled: false,
-    ),
     this.aiChatAssistant = const RemoteFeatureConfig(enabled: true),
   });
 
   final RemoteFeatureConfig cloudDriveImport;
-  final RemoteFeatureConfig showStoreWebCheckoutFallback;
   final RemoteFeatureConfig aiChatAssistant;
 
   static const defaults = RemoteConfigFeatures();
@@ -77,10 +70,6 @@ class RemoteConfigFeatures {
         json['cloudDriveImport'],
         enabled: defaults.cloudDriveImport.enabled,
       ),
-      showStoreWebCheckoutFallback: RemoteFeatureConfig.fromJson(
-        json['showStoreWebCheckoutFallback'],
-        enabled: defaults.showStoreWebCheckoutFallback.enabled,
-      ),
       aiChatAssistant: RemoteFeatureConfig.fromJson(
         json['aiChatAssistant'],
         enabled: defaults.aiChatAssistant.enabled,
@@ -91,15 +80,12 @@ class RemoteConfigFeatures {
   bool isEnabled(RemoteFeature feature) {
     return switch (feature) {
       RemoteFeature.cloudDriveImport => cloudDriveImport.enabled,
-      RemoteFeature.showStoreWebCheckoutFallback =>
-        showStoreWebCheckoutFallback.enabled,
       RemoteFeature.aiChatAssistant => aiChatAssistant.enabled,
     };
   }
 
   Map<String, Object?> toJson() => {
     'cloudDriveImport': cloudDriveImport.toJson(),
-    'showStoreWebCheckoutFallback': showStoreWebCheckoutFallback.toJson(),
     'aiChatAssistant': aiChatAssistant.toJson(),
   };
 }
