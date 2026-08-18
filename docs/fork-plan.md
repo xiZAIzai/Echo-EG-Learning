@@ -67,6 +67,8 @@ NDJSON 流式回传。前两者摘除，后三者搬进 App——**不需要任�
   dev flavor（`app.echoloop.dev`，debug 签名）可与 Play 版共存，用于快速验证。
 - **开发环境**：Flutter 3.41.5（CI 锁定版本）+ JDK 17 + Android SDK；开发机无需显卡；
   VS Code + Flutter 扩展 + 真机 hot reload（录音/ASR 在模拟器上残缺，日常插真机）。
+  开发与 Claude Code 会话在 **Windows 侧原生**进行（2026-08-15 探测确认：项目在 NTFS D 盘，
+  WSL 跨 `/mnt/d` 构建有 IO 性能陷阱且 adb 连真机需 usbipd 转发；Windows 侧两边都原生直连）。
 - **本地构建**：prod flavor release 强制读 `android/key.properties`（无则失败）；
   无 keystore 前用 `flutter build apk --release --flavor=dev` 验证。
 - **release.yml 精简**（原 516 行面向 R2 + Google Play + App Store 全链路，直接打 tag 必挂）：

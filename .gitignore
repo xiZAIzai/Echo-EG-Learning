@@ -58,3 +58,9 @@ METHOD.md
 
 # Test artifacts
 test-results.json
+
+# Claude Code personal local settings
+.claude/settings.local.json
+
+# Claude Code session logs
+.claude/logs/
