@@ -1,7 +1,7 @@
 # Echo Loop 项目规划
 
-> 最后更新：2026-08-18（F1 dev flavor 真机基线完成）
-> 当前焦点：M6 二开基线——F2 自建发布链路（release.yml 精简 + keystore + tag `v1.0.29`）
+> 最后更新：2026-08-18（F1/F2 完成，焦点转 F3 数据自持）
+> 当前焦点：M6 二开基线——F3 模型/词典全量下载备份（趁 CDN 存活）
 
 ## 产品目标
 
@@ -71,9 +71,11 @@ chatbot 组件（多轮对话、NDJSON 流式、sheet + 全屏双载体，规格
 - ✅ dev flavor APK 真机跑通（2026-08-18，F1）：环境全 D 盘搭建（Flutter 3.41.5 /
   JDK 17 / Android SDK），`app-dev-debug.apk` 装入 Redmi K90，四 Tab 导航无崩溃，
   good 基线确立。
-- release.yml 精简（删 iOS / R2 / AAB / Google Play 腿，保留 tag 版本解析 + APK 构建 +
-  GitHub Release）；自建 keystore + 4 个 secrets；包名接管策略（`.elbak` 备份迁移，
-  不改包名）；首个 tag `v1.0.29`。
+- ✅ 自建发布链路（2026-08-18，F2）：release.yml 516→231 行；自签 keystore（正本在
+  `D:\apps\dev\keystores\`，PKCS12 单密码）+ 4 个 secrets；GitHub Release `v1.0.29`
+  已发布（`Echo-Loop-1.0.29-arm64.apk`，versionCode 1377，签名指纹与本地一致）。
+  注意：fork 仓库 push 触发的工作流默认休眠，首次需 workflow_dispatch 激活。
+  真机包名接管（`.elbak` 迁移）留待日常切换时执行。
 - 数据自持：趁 CDN 存活全量下载备份模型与词典（ASR / VAD / Kokoro / Piper / 词典数据）。
 
 ### ⬜ Milestone 7：摘除商业层
@@ -103,7 +105,7 @@ l10n 中英双语 → 需要持久化则 Drift 加表：
 ## 近阶段工作重点
 
 1. ~~F1 dev flavor APK 真机跑通~~ ✅ 2026-08-18。
-2. F2 自建发布链路（release.yml 精简 + keystore + tag `v1.0.29`）。
+2. ~~F2 自建发布链路~~ ✅ 2026-08-18（Release `v1.0.29` 已出 APK）。
 3. F3 模型/词典全量下载备份。
 4. F4 摘除订阅/配额层（第一刀）。
 5. F5 AI 端内直连改造（翻译/聊天起步）。
