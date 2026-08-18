@@ -98,7 +98,13 @@
 - `ai_http2_retry_interceptor.dart`（HTTP/2 重试，非商业）
 - remote_config 框架与非商业开关
 
-**验证**：`flutter analyze` lib/ 生产代码 **0 error**；全量 `flutter test` 回归见 TASKS.md 完成记录。
+**验证**：
+- `flutter analyze` 全仓 **0 error 0 warning**（含 test/）。
+- 全量 `flutter test`：**+4593 通过 / ~13 跳过 / -44 失败**。44 个失败经基线对照确认为 **Windows 开发机预存环境问题、与本次摘除零相关**：
+  - `media_playback_screen_test` 31 个：临时目录删除 errno 32（media_kit/ffmpeg 原生句柄滞后释放的文件锁）——改动前基线同文件同样 31 个失败，逐数吻合；
+  - 转录/孤儿清理/TTS 缓存/音频导入共 8 个：Windows 路径分隔符（`\` vs `/`）与文件系统时序差异——基线同为 8 个，逐数吻合；
+  - 备份 ZIP/百度网盘/媒体引擎共 5 个：文件 IO 同特征，且三个文件对已删符号零引用。
+  - CI（Ubuntu）不受上述 Windows 特性影响。
 
 ## 4 恢复指引
 

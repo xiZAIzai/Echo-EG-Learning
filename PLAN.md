@@ -1,7 +1,7 @@
 # Echo Loop 项目规划
 
-> 最后更新：2026-08-18（F1/F2 完成，焦点转 F3 数据自持）
-> 当前焦点：M6 二开基线——F3 模型/词典全量下载备份（趁 CDN 存活）
+> 最后更新：2026-08-18（M6 收官；M7 第一刀完成，焦点转 F4 真机冒烟与 M8 AI 直连）
+> 当前焦点：F4 真机冒烟验证；随后 M8 AI 端内直连（含 ASR/TTS 转云端 API 的新方向）
 
 ## 产品目标
 
@@ -66,30 +66,37 @@ chatbot 组件（多轮对话、NDJSON 流式、sheet + 全屏双载体，规格
 [docs/subscription-single-source-plan.md](./docs/subscription-single-source-plan.md)）。
 二开方向是**整体摘除**（M7 执行），上游遗留的生产验证等待事项随摘除一并终结，不再投入。
 
-### 🚧 Milestone 6：二开基线与自建发布
+### ✅ Milestone 6：二开基线与自建发布（2026-08-18 收官）
 
-- ✅ dev flavor APK 真机跑通（2026-08-18，F1）：环境全 D 盘搭建（Flutter 3.41.5 /
-  JDK 17 / Android SDK），`app-dev-debug.apk` 装入 Redmi K90，四 Tab 导航无崩溃，
-  good 基线确立。
-- ✅ 自建发布链路（2026-08-18，F2）：release.yml 516→231 行；自签 keystore（正本在
+- ✅ dev flavor APK 真机跑通（F1）：环境全 D 盘搭建（Flutter 3.41.5 / JDK 17 /
+  Android SDK），`app-dev-debug.apk` 装入 Redmi K90，四 Tab 导航无崩溃，good 基线确立。
+- ✅ 自建发布链路（F2）：release.yml 516→231 行；自签 keystore（正本在
   `D:\apps\dev\keystores\`，PKCS12 单密码）+ 4 个 secrets；GitHub Release `v1.0.29`
   已发布（`Echo-Loop-1.0.29-arm64.apk`，versionCode 1377，签名指纹与本地一致）。
   注意：fork 仓库 push 触发的工作流默认休眠，首次需 workflow_dispatch 激活。
-  真机包名接管（`.elbak` 迁移）留待日常切换时执行。
-- 数据自持：趁 CDN 存活全量下载备份模型与词典（ASR / VAD / Kokoro / Piper / 词典数据）。
+- ✅ 数据自持（F3）：`D:\apps\backup\echo-loop-cdn\` 全量备份 1.6GB / 23 文件
+  （Whisper×3 + VAD / Kokoro×2 / Piper×9 / 词典×2），sha256 全校验，含恢复指引。
+- 详录归档：[docs/tasks-archive/tasks-2026-08-18-m6-baseline.md](./docs/tasks-archive/tasks-2026-08-18-m6-baseline.md)。
 
-### ⬜ Milestone 7：摘除商业层
+### 🚧 Milestone 7：摘除商业层
 
-- 第一刀（必做）：摘订阅/配额层——paywall、RevenueCat、Paddle、entitlements、散布在各
-  AI 功能的 402 配额门禁，系统性清理而非硬关开关；跑全量测试确认回归。
-- 第二刀（可选）：PostHog 埋点、中国区判定、渠道分发逻辑。
+- ✅ 第一刀（2026-08-18，F4）：摘订阅/配额层——132 文件 / -19.6k 行，整删
+  subscription feature（36 文件）、user_region、RevenueCat/Paddle 接入、各 AI 功能
+  402 门禁直通（401 登录链路保留）、iOS 订阅通道、BILLING 权限、两个支付 SDK、
+  113 个 l10n 商业 key。留痕：[docs/fork-removal-log.md](./docs/fork-removal-log.md)。
+  验证：analyze 0 error；全量测试 +4593/-44（44 个失败经基线对照全部为 Windows
+  开发机预存环境问题）。待真机冒烟。
+- 第二刀（可选）：PostHog 埋点、渠道分发逻辑。（中国区判定已随第一刀连带摘除）
 
-### ⬜ Milestone 8：AI 端内直连
+### 🚧 Milestone 8：AI 端内直连（含 ASR/TTS 转云端的新方向）
 
 - 设置页新增「AI 服务」配置（Base URL + API Key + 模型名，存 `flutter_secure_storage`）；
   各 API client 从「发自家后端」改为「直连 OpenAI 兼容端点 + App 内置 prompt 模板」。
 - 从翻译 / AI 助教聊天起步（纯文本流式），再做结构化功能（句子解析 / 词汇解析 / 意群 /
-  AI 词典）；复述评估复用本地 ASR 转录文本 + 原文发 LLM，不上传音频。
+  AI 词典）。
+- **新方向（2026-08-18 决策）**：离线 ASR/TTS 逐步转云端语音 API（用户有现成语音 API
+  资源），端侧 sherpa/Kokoro/Piper 链路退场——顺带绕开上游 Android 离线 ASR native
+  崩溃 P0；词典保留本地。F3 备份为过渡期保险。
 - 服务商面向国内 OpenAI 兼容接口（DeepSeek / Kimi / 智谱 GLM / 通义），自填 key 保留换厂商自由。
 
 ### ⬜ Milestone 9：学习功能扩展
@@ -98,7 +105,7 @@ chatbot 组件（多轮对话、NDJSON 流式、sheet + 全屏双载体，规格
 l10n 中英双语 → 需要持久化则 Drift 加表：
 
 1. 写作：句子仿写 → 段落 → 作文；批改复用 chatbot 的 NDJSON 流式协议与双载体组件。
-2. 听写/拼写：复用本地 TTS + 离线 ASR。
+2. 听写/拼写：优先复用云端语音 API（随 M8 新方向调整）。
 3. 考试题型：新 Drift 表 + 选择/填空练习页，挂在句子与词汇库上。
 4. 词汇：FSRS 基础设施已落地（`lib/features/memory_scheduler/`），扩展初中考试词表。
 
@@ -106,9 +113,9 @@ l10n 中英双语 → 需要持久化则 Drift 加表：
 
 1. ~~F1 dev flavor APK 真机跑通~~ ✅ 2026-08-18。
 2. ~~F2 自建发布链路~~ ✅ 2026-08-18（Release `v1.0.29` 已出 APK）。
-3. F3 模型/词典全量下载备份。
-4. F4 摘除订阅/配额层（第一刀）。
-5. F5 AI 端内直连改造（翻译/聊天起步）。
+3. ~~F3 模型/词典全量下载备份~~ ✅ 2026-08-18。
+4. F4 摘除订阅/配额层——代码与回归已完成，剩真机冒烟；F4b 第二刀可选。
+5. F5 AI 端内直连改造（翻译/聊天起步，含 ASR/TTS 云端化新方向）。
 
 ## 架构约束（精简版）
 

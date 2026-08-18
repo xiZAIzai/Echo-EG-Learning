@@ -1,33 +1,25 @@
 # Echo Loop 任务清单
 
-> 最后更新：2026-08-18（F1/F2 完成，焦点转 F3 数据自持）
-> 当前焦点：M6 二开基线——F3 模型/词典全量下载备份（趁 CDN 存活）
+> 最后更新：2026-08-18（F4 第一刀完成；M6 收官，M7 主体已随第一刀落地）
+> 当前焦点：F4 真机冒烟验证 → F4b 第二刀（可选：PostHog 埋点摘除）
 
 ## 二开任务（总纲见 [docs/fork-plan.md](./docs/fork-plan.md)）
 
 > 按里程碑推进；未启动的里程碑只登记方向，细节到启动时再展开，不预列。
 
-### M6 二开基线与自建发布（当前）
+### M6 二开基线与自建发布（✅ 2026-08-18 收官，详录见归档）
 
-- [x] F1 本地基线：dev flavor APK（`app.echoloop.dev`，debug 签名，可与 Play 版共存）真机跑通，不改任何代码，确立已知 good 基线。
-  **完成时间**: 2026-08-18
-  **环境**（从零搭建，全 D 盘）：Flutter 3.41.5 / JDK 17 / Android SDK+NDK / pub 缓存 → `D:\apps\dev\`，用户级环境变量已持久化；Windows 开发者模式已开。三个构建坑与解法已记入会话记忆（pub 缓存必须与项目同盘、引擎镜像 POM 损坏走官方源、media_kit jar 走 Clash 7897 代理预下载到项目 build 目录）。
-  **APK**：`build/app/outputs/flutter-apk/app-dev-debug.apk`（187M，arm64，versionName 1.0.29）。
-  **真机验证**（Redmi K90，Android 13，装 MIUI 需额外开「USB 安装」）：adb 安装 ✓，启动 ✓（PID 存活无重启），资源库/学习计划/复习/我的 四 Tab 导航 ✓ 无崩溃；词典版本检查/官方合集刷新报连接错误属预期（匿名离线模式，dart-define 未配）。
-  **未验证项**：音频导入/播放、录音 ASR（需真机导入素材 + 模型下载，留待日常使用确认；ASR native 崩溃为上游已知 P0）。
-- [x] F2 自建发布链路：精简 release.yml（删 iOS 腿、R2 上传、AAB 构建、Google Play 上传，保留 tag 版本解析 + APK 构建 + GitHub Release）；`keytool` 自建 keystore + 4 个 secrets（`ANDROID_KEYSTORE_BASE64` / `ANDROID_KEYSTORE_PASSWORD` / `ANDROID_KEY_PASSWORD` / `ANDROID_KEY_ALIAS`）；首个 tag `v1.0.29` 出 APK。真机安装走包名接管：`.elbak` 备份 → 卸载 Play 版 → 装自建版 → 恢复备份。
-  **完成时间**: 2026-08-18
-  **release.yml**：516 行 → 231 行（单 job 去 matrix，draft 改直接发布，删草稿清理），commit `0e9f172b`。
-  **keystore**：PKCS12 单密码（坑：PKCS12 下 store/key 不同密码会解不开私钥，gradle 报 `final block not properly padded`；单密码后 apksigner 秒验通过）。正本与密码档案在 `D:\apps\dev\keystores\`（仓库外），工作副本 `android/app/upload-keystore.jks` + `android/key.properties`（均被 gitignore）。
-  **本地验证**：prod release 构建成功（109.9MB，arm64，versionCode=1377 与 CI 一致）。
-  **CI 发布**：tag `v1.0.29` 推送后 workflow 未自动触发（**fork 仓库 push 事件工作流默认休眠，需一次手动激活**），用 `workflow_dispatch` 手动触发成功；run 32100597017 全绿，GitHub Release `v1.0.29` 已正式发布，附件 `Echo-Loop-1.0.29-arm64.apk`（111MB）。下个 tag 验证自动触发。
-  **真机包名接管**（`.elbak` 备份 → 卸载 Play 版 → 装自建版）：留待日常使用切换时执行，不在本任务收尾。
-- [ ] F3 数据自持：趁 CDN 存活全量下载备份模型与词典（ASR / VAD / Kokoro / Piper / 词典数据）。
+- [x] F1 本地基线 / F2 自建发布链路 / F3 数据自持备份 —— 全部完成（2026-08-18）。
+  完成记录与踩坑详见 [docs/tasks-archive/tasks-2026-08-18-m6-baseline.md](./docs/tasks-archive/tasks-2026-08-18-m6-baseline.md)。
 
 ### M7 摘除商业层
 
-- [ ] F4 第一刀：摘订阅/配额层——paywall、RevenueCat、Paddle、entitlements、散布在各 AI 功能的 402 配额门禁，系统性清理而非硬关开关；跑全量测试确认回归。
-- [ ] F4b 第二刀（可选）：摘 PostHog 埋点、中国区判定、渠道分发逻辑。
+- [x] F4 第一刀：摘订阅/配额层——paywall、RevenueCat、Paddle、entitlements、散布在各 AI 功能的 402 配额门禁，系统性清理而非硬关开关；跑全量测试确认回归。
+  **完成时间**: 2026-08-18
+  **摘除规模**: 132 文件 / -19612 +1595 行。整删 `lib/features/subscription/`（36 文件）+ user_region（连带，证据源断且零消费）+ revenuecat/paddle 配置 + 权益信号拦截器 + premium 主题常量 + 订阅事件名；各 AI 功能门禁直通（401 登录链路保留）；iOS 订阅通道/BILLING 权限/两个支付 SDK 依赖摘除；l10n 删 113 个零消费 key。全程留痕见 [docs/fork-removal-log.md](./docs/fork-removal-log.md)。
+  **验证**: analyze 全仓 0 error 0 warning；全量测试 +4593/~13/-44，44 失败经基线对照全部为 Windows 开发机预存环境问题（39 个与基线逐数吻合，5 个零关联同特征），CI（Ubuntu）不受影响。
+  **待办**: 真机冒烟（装 dev 包过一遍 AI 功能确认无门禁残留）。
+- [ ] F4b 第二刀（可选）：摘 PostHog 埋点、渠道分发逻辑。（中国区判定已随 F4 连带摘除）
 
 ### M8 AI 端内直连
 
@@ -51,6 +43,7 @@
 
 ## 历史归档
 
+- [2026-08-18 M6 二开基线与自建发布](./docs/tasks-archive/tasks-2026-08-18-m6-baseline.md)
 - [2026-08-15 fork 基线全量快照](./docs/tasks-archive/tasks-2026-08-15-fork-baseline.md)
 - [2026-07-28 全量任务快照](./docs/tasks-archive/tasks-2026-07-28-full.md)
 - [2026-07-12 全量任务快照](./docs/tasks-archive/tasks-2026-07-12-full.md)
